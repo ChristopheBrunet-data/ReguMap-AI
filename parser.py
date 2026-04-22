@@ -44,23 +44,38 @@ class EasaXmlParser:
         print(f"Searching for tag topic... Found {len(rules)}")
 
         # Pre-process Word document SDT elements to extract text content
+        # Use both namespace-aware and namespace-agnostic approaches
         ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
-        sdts = root.xpath('.//w:sdt', namespaces=ns)
+        sdts = root.xpath('.//*[local-name()="sdt"]')
         sdt_map = {}
         for sdt in sdts:
-            w_id_elem = sdt.find('.//w:sdtPr/w:id', namespaces=ns)
-            if w_id_elem is not None:
-                val = w_id_elem.get(f'{{{ns["w"]}}}val')
-                if val:
-                    sdt_map[val] = "".join(sdt.itertext()).strip()
+            # Try to find ID in sdtPr
+            id_val = None
+            id_elems = sdt.xpath('.//*[local-name()="id"]')
+            for ide in id_elems:
+                # Look for val attribute in any namespace
+                for attr_name, attr_val in ide.attrib.items():
+                    if attr_name.endswith("val"):
+                        id_val = attr_val
+                        break
+                if id_val: break
+            
+            if id_val:
+                # Extract all text content
+                sdt_map[id_val] = "".join(sdt.itertext()).strip()
+
+        print(f"DEBUG: Processed {len(sdt_map)} SDT elements.")
 
         for rule in rules:
+            print(f"DEBUG: Processing rule element: {etree.tostring(rule).decode()[:100]}...")
             req_id = rule.get("ERulesId", "UNKNOWN_ID")
             source_title = rule.get("source-title", "Unknown Title")
             sdt_id = rule.get("sdt-id", "")
 
             # Extract content from the corresponding SDT block in the Word document part
             text_content = sdt_map.get(sdt_id, "")
+            if not text_content:
+                print(f"DEBUG: No text content for rule {req_id} (sdt-id: {sdt_id})")
 
             # TASK 3: Noise Reduction Filter
             lower_title = source_title.lower()
@@ -68,10 +83,12 @@ class EasaXmlParser:
             noise_keywords = ["preface", "table of contents", "revision history", "informational"]
 
             if any(k in lower_title for k in noise_keywords) or any(k in lower_content[:200] for k in noise_keywords):
+                print(f"DEBUG: Skipping rule {req_id} due to noise keywords.")
                 continue
 
             # Prioritize regulatory IDs (skip unknown or generic topics)
             if req_id == "UNKNOWN_ID" or "FOREWORD" in req_id.upper():
+                print(f"DEBUG: Skipping rule {req_id} due to generic ID.")
                 continue
 
             # Determine Hard Law vs Soft Law heuristically
@@ -96,6 +113,7 @@ class EasaXmlParser:
                 applicability_date=app_date,
                 amc_gm_info=amc_gm_info
             )
+            print(f"DEBUG: Yielded requirement {req_id}")
 
 
 class ManualPdfParser:

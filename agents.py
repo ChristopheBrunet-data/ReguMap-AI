@@ -25,7 +25,7 @@ from schemas import EasaRequirement, ManualChunk, ComplianceAudit, AuditStatus
 from knowledge_graph import RegulatoryKnowledgeGraph
 
 # Re-ranker threshold: below this, flag as Noise/Informational
-RERANK_THRESHOLD = 0.85
+RERANK_THRESHOLD = 0.6
 
 # Known cross-agency reference data for conflict detection
 CROSS_AGENCY_REFS = {
@@ -120,11 +120,17 @@ class BaseAgent:
 
     @retry(wait=wait_exponential(multiplier=1, min=2, max=10), stop=stop_after_attempt(5))
     def _call_structured(self, prompt: ChatPromptTemplate, args: dict, output_schema: type) -> BaseModel:
+        print(f"DEBUG: [{self.name}] Calling Gemini for structured output...")
         structured_llm = self.llm.with_structured_output(output_schema)
         chain = prompt | structured_llm
-        response = chain.invoke(args)
-        time.sleep(0.5)
-        return response
+        try:
+            response = chain.invoke(args)
+            print(f"DEBUG: [{self.name}] Gemini response received.")
+            time.sleep(0.5)
+            return response
+        except Exception as e:
+            print(f"DEBUG: [{self.name}] Gemini call failed: {e}")
+            raise
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -137,8 +143,8 @@ class ResearcherAgent(BaseAgent):
 Analyze retrieved rules to build a comprehensive regulatory brief.
 
 Given the user's query, retrieved rules, and their re-ranker scores:
-1. Identify PRIMARY rules (re-rank score ≥ 0.85) that directly address the query.
-2. Flag rules with score < 0.85 as 'Noise/Informational' — these should NOT trigger a full audit.
+1. Identify PRIMARY rules (re-rank score >= 0.6) that directly address the query.
+2. Flag rules with score < 0.6 as 'Noise/Informational' — these should NOT trigger a full audit.
 3. Detect CROSS-DOMAIN connections (e.g., Air Ops rule referencing Aircrew requirements).
 4. Classify each rule as Hard Law (IR) or Soft Law (AMC/GM).
 5. Identify the CORE REGULATORY TOPIC (e.g., 'Contingency Fuel', 'Crew Training').
@@ -164,6 +170,10 @@ Graph Context (multi-hop):
     ])
 
     def research(self, query: str, rules_with_scores: List[tuple], graph_context: str) -> ResearchResult:
+        print(f"DEBUG: ResearcherAgent received {len(rules_with_scores)} rules.")
+        for r, s in rules_with_scores:
+            print(f"  - Rule {r.id}: rerank_score={s:.4f}")
+
         rules_context = "\n\n---\n\n".join(
             f"[{r.id} | {r.domain} | {r.amc_gm_info} | rerank_score={s:.3f}]\n{r.source_title}\n{r.text[:500]}"
             for r, s in rules_with_scores
@@ -493,7 +503,7 @@ class ComplianceBoard:
     Researcher (+ noise gate) → Conflict Detector (cross-agency) → Auditor (multimodal) → Critic (back-link)
     """
 
-    def __init__(self, api_key: str, model_name: str = "gemini-2.5-flash"):
+    def __init__(self, api_key: str, model_name: str = "gemini-1.5-pro"):
         llm = ChatGoogleGenerativeAI(
             model=model_name, temperature=0.0, google_api_key=api_key,
         )
@@ -547,18 +557,11 @@ class ComplianceBoard:
             f"noise={len(noise_rules)}"
         )
 
-        # Noise gate: if THIS requirement was flagged as noise, skip full audit
-        if requirement.id in noise_rules:
-            trace_parts.append("NOISE_GATE: Requirement flagged as Noise/Informational — skipping full audit.")
-            return ComplianceAudit(
-                requirement_id=requirement.id,
-                status=AuditStatus.INFORMATIONAL,
-                evidence_quote="Flagged as noise by re-ranker (score < 0.85).",
-                source_reference="N/A",
-                confidence_score=0.0,
-                suggested_fix=None,
-                agent_trace=" → ".join(trace_parts),
-            )
+        # ── Stage 1: Research + Noise Gate ────────────────────────────────
+        # ... (Researcher logic) ...
+        is_target_noise = requirement.id in noise_rules
+        if is_target_noise:
+            trace_parts.append("NOISE_GATE: Requirement flagged as noise, but bypassing for explicit audit.")
 
         # ── Stage 2: Cross-Agency Conflict Detection ──────────────────────
         graph_conflicts = []
@@ -673,7 +676,7 @@ class ComplianceBoard:
         final_status = audit_result.get("status", "Requires Human Review")
         confidence = audit_result.get("confidence_score", 0.0)
 
-        if confidence < 0.85 or validation_score < 0.6:
+        if confidence < 0.6 or validation_score < 0.6:
             final_status = "Requires Human Review"
 
         return ComplianceAudit(

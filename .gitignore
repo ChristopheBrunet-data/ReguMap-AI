@@ -50,3 +50,9 @@ temp_*.pdf
 scratch/
 gitkey
 gitkey.pub
+gitkey
+gitkey.pub
+.env
+__pycache__/
+.venv/
+data/

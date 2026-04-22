@@ -18,8 +18,13 @@ def load_all_requirements(xml_paths: dict, normalize_domain_func) -> list:
                 for r in reqs:
                     r.domain = normalize_domain_func(r.domain or domain, r.id)
                 all_reqs.extend(reqs)
+                print(f"DEBUG: ui_utils added {len(reqs)} requirements from {domain}. Total now: {len(all_reqs)}")
             except Exception as e:
-                st.warning(f"Could not parse {domain}: {e}")
+                msg = f"Could not parse {domain}: {e}"
+                try:
+                    st.warning(msg)
+                except Exception:
+                    print(f"WARNING: {msg}")
     return all_reqs
 
 def save_audit_history(results, history_dir):
