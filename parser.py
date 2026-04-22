@@ -227,19 +227,66 @@ class ManualPdfParser:
         doc.close()
         return result
 
-    def parse(self) -> Generator[ManualChunk, None, None]:
+    def parse(self, chunk_size: int = 500, overlap: int = 100) -> Generator[ManualChunk, None, None]:
         """
-        Identifies headers to create logical context blocks.
-        Also extracts visual evidence (images, tables) from each page.
+        Identifies headers to create logical context blocks, then applies a sliding window
+        with overlap to ensure context preservation across chunks.
         """
         doc = self._open_doc()
 
         current_section_title = "General"
-        current_content = []
-        current_page_start = 1
-        current_has_diagram = False
-        current_diagram_path = None
-        current_bbox = None
+        section_content = []
+        section_page_start = 1
+        section_visuals = []
+
+        def create_chunks(content_list, title, page_num, visuals) -> List[ManualChunk]:
+            full_text = "\n".join(content_list)
+            words = full_text.split()
+            chunks = []
+            
+            if not words:
+                return []
+
+            # If text is small, return one chunk
+            if len(words) <= chunk_size:
+                chunks.append(ManualChunk(
+                    page_number=page_num,
+                    section_title=title,
+                    content=full_text,
+                    file_hash=self._file_hash,
+                    has_diagram=len(visuals) > 0,
+                    diagram_path=visuals[0]["path"] if visuals else None,
+                    bbox=visuals[0]["bbox"] if visuals else None,
+                ))
+                return chunks
+
+            # Sliding window logic
+            step = chunk_size - overlap
+            for i in range(0, len(words), step):
+                chunk_words = words[i : i + chunk_size]
+                if not chunk_words:
+                    break
+                
+                chunk_text = " ".join(chunk_words)
+                
+                # Associated visuals: for now, we just link the first one in the section
+                # to all chunks in that section, or none if it's too far.
+                # A better way would be to track which page the chunk belongs to.
+                # Here we just use the section-level visual for simplicity.
+                chunks.append(ManualChunk(
+                    page_number=page_num,
+                    section_title=title,
+                    content=chunk_text,
+                    file_hash=self._file_hash,
+                    has_diagram=len(visuals) > 0,
+                    diagram_path=visuals[0]["path"] if visuals else None,
+                    bbox=visuals[0]["bbox"] if visuals else None,
+                ))
+                
+                if i + chunk_size >= len(words):
+                    break
+            
+            return chunks
 
         for page_num in range(len(doc)):
             page = doc.load_page(page_num)
@@ -263,43 +310,19 @@ class ManualPdfParser:
                 text = security.redact_pii(text)
 
                 if self._is_header(b):
-                    if current_content:
-                        yield ManualChunk(
-                            page_number=current_page_start,
-                            section_title=current_section_title,
-                            content="\n".join(current_content),
-                            file_hash=self._file_hash,
-                            has_diagram=current_has_diagram,
-                            diagram_path=current_diagram_path,
-                            bbox=current_bbox,
-                        )
+                    if section_content:
+                        yield from create_chunks(section_content, current_section_title, section_page_start, section_visuals)
+                    
                     current_section_title = text.split("\n")[0]
-                    current_content = [text]
-                    current_page_start = page_num + 1
-                    if visuals:
-                        current_has_diagram = True
-                        current_diagram_path = visuals[0]["path"]
-                        current_bbox = visuals[0]["bbox"]
-                    else:
-                        current_has_diagram = False
-                        current_diagram_path = None
-                        current_bbox = None
+                    section_content = [text]
+                    section_page_start = page_num + 1
+                    section_visuals = visuals
                 else:
-                    current_content.append(text)
-                    if visuals and not current_has_diagram:
-                        current_has_diagram = True
-                        current_diagram_path = visuals[0]["path"]
-                        current_bbox = visuals[0]["bbox"]
+                    section_content.append(text)
+                    if visuals and not section_visuals:
+                        section_visuals = visuals
 
-        if current_content:
-            yield ManualChunk(
-                page_number=current_page_start,
-                section_title=current_section_title,
-                content="\n".join(current_content),
-                file_hash=self._file_hash,
-                has_diagram=current_has_diagram,
-                diagram_path=current_diagram_path,
-                bbox=current_bbox,
-            )
+        if section_content:
+            yield from create_chunks(section_content, current_section_title, section_page_start, section_visuals)
 
         doc.close()

@@ -22,7 +22,7 @@ if not ENCRYPTION_KEY:
 
 CIPHER = Fernet(ENCRYPTION_KEY.encode())
 
-JWT_SECRET = os.getenv("JWT_SECRET", "super-secret-aeronautical-key")
+JWT_SECRET = os.getenv("JWT_SECRET")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 2. DATA PROTECTION (AES-256)
@@ -116,7 +116,7 @@ AUDIT_LOG = os.path.join(LOG_DIR, "audit.log")
 
 def log_audit_event(user_id: str, action: str, data_accessed: str = "N/A", ip_address: str = "127.0.0.1"):
     """Creates a forensic audit entry."""
-    timestamp = datetime.datetime.now().isoformat()
+    timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
     entry = {
         "timestamp": timestamp,
         "user_id": user_id,
@@ -144,10 +144,13 @@ ROLES = {
 
 def generate_session_token(user_id: str, role: str) -> str:
     """Generates a short-lived JWT session token."""
+    if not os.getenv("JWT_SECRET"):
+        raise SecurityException("JWT_SECRET environment variable is not set.")
+    
     payload = {
         "user_id": user_id,
         "role": role,
-        "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=2)
+        "exp": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=2)
     }
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 

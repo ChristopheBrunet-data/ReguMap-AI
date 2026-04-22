@@ -1,5 +1,31 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List, Tuple
+from enum import Enum
+
+
+class AuditStatus(str, Enum):
+    COMPLIANT = "Compliant"
+    PARTIAL = "Partial"
+    GAP = "Gap"
+    REQUIRES_HUMAN_REVIEW = "Requires Human Review"
+    INFORMATIONAL = "Informational"
+
+
+class GraphNodeType(str, Enum):
+    AGENCY = "Agency"
+    REGULATION = "Regulation"
+    AMC_GM = "AMC_GM"
+    MANUAL_SECTION = "ManualSection"
+    DIAGRAM = "Diagram"
+    TECHNICAL_LIMIT = "TechnicalLimit"
+
+
+class EdgeType(str, Enum):
+    MANDATES = "MANDATES"
+    CLARIFIES = "CLARIFIES"
+    REFERENCES = "REFERENCES"
+    CONFLICTS_WITH = "CONFLICTS_WITH"
+    CONTAINS_DIAGRAM = "CONTAINS_DIAGRAM"
 
 
 class EasaRequirement(BaseModel):
@@ -41,7 +67,7 @@ class ComplianceAudit(BaseModel):
     Represents the result of an AI compliance check for a specific EASA requirement against the manual chunks.
     """
     requirement_id: str = Field(..., description="The ID of the EASA requirement being checked")
-    status: str = Field(..., description="The compliance status: 'Compliant', 'Partial', 'Gap', or 'Requires Human Review'")
+    status: AuditStatus = Field(..., description="The compliance status")
     evidence_quote: str = Field(..., description="The exact sentence(s) from the manual used as proof")
     source_reference: str = Field(..., description="Source citation, e.g., 'Page 42, Paragraph 4.1.2'")
     confidence_score: float = Field(..., description="A score from 0.0 to 1.0 indicating AI confidence")
@@ -57,7 +83,7 @@ class ComplianceAudit(BaseModel):
 class GraphNode(BaseModel):
     """Represents a node in the regulatory knowledge graph."""
     id: str = Field(..., description="Unique node identifier")
-    node_type: str = Field(..., description="One of: Agency, Regulation, AMC_GM, ManualSection, Diagram, TechnicalLimit")
+    node_type: GraphNodeType = Field(..., description="Type of node")
     label: str = Field(..., description="Human-readable label for display")
     domain: Optional[str] = Field(None, description="Regulatory domain")
     properties: dict = Field(default_factory=dict, description="Additional metadata")
@@ -67,6 +93,6 @@ class GraphEdge(BaseModel):
     """Represents an edge in the regulatory knowledge graph."""
     source: str = Field(..., description="Source node ID")
     target: str = Field(..., description="Target node ID")
-    edge_type: str = Field(..., description="One of: MANDATES, CLARIFIES, REFERENCES, CONFLICTS_WITH, CONTAINS_DIAGRAM")
+    edge_type: EdgeType = Field(..., description="Type of relationship")
     weight: float = Field(1.0, description="Edge weight for graph traversal")
     properties: dict = Field(default_factory=dict, description="Additional metadata")

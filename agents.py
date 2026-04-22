@@ -15,13 +15,13 @@ import time
 import base64
 import security
 from typing import List, Optional, Dict
-
+from pydantic import BaseModel, Field
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from tenacity import retry, wait_exponential, stop_after_attempt
 
-from schemas import EasaRequirement, ManualChunk, ComplianceAudit
+from schemas import EasaRequirement, ManualChunk, ComplianceAudit, AuditStatus
 from knowledge_graph import RegulatoryKnowledgeGraph
 
 # Re-ranker threshold: below this, flag as Noise/Informational
@@ -51,6 +51,61 @@ CROSS_AGENCY_REFS = {
     },
 }
 
+# ──────────────────────────────────────────────────────────────────────────────
+# 1. Structured Output Models
+# ──────────────────────────────────────────────────────────────────────────────
+
+class CrossDomainLink(BaseModel):
+    source: str = Field(..., alias="from")
+    target: str = Field(..., alias="to")
+    relationship: str
+
+class ResearchResult(BaseModel):
+    primary_rules: List[str]
+    noise_rules: List[str]
+    core_topic: str
+    cross_domain_links: List[CrossDomainLink]
+    regulatory_brief: str
+    coverage_gaps: List[str]
+
+class AgencyAnalysis(BaseModel):
+    agency: str
+    rule_ref: str
+    requirement_summary: str
+    differs_from_easa: bool
+    difference_detail: str
+
+class ConflictDetail(BaseModel):
+    rule_a: str
+    rule_b: str
+    type: str = Field(..., description="CONFLICT|OVERLAP|SUPERSEDED")
+    description: str
+    severity: str = Field(..., description="HIGH|MEDIUM|LOW")
+
+class ConflictResult(BaseModel):
+    core_topic: str
+    cross_agency_analysis: List[AgencyAnalysis]
+    conflicts: List[ConflictDetail]
+    summary: str
+
+class AuditResult(BaseModel):
+    requirement_id: str
+    status: AuditStatus
+    evidence_quote: str
+    source_reference: str
+    confidence_score: float
+    suggested_fix: Optional[str] = None
+    cross_refs_used: List[str]
+    visual_evidence_pages: List[int]
+
+class CriticResult(BaseModel):
+    validation_score: float
+    evidence_verified: bool
+    citation_verified: bool
+    status_justified: bool
+    correct_citation: Optional[str] = None
+    critique: str
+    suggested_fix_valid: Optional[bool] = None
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Agent Base
@@ -64,22 +119,12 @@ class BaseAgent:
         self.name = name
 
     @retry(wait=wait_exponential(multiplier=1, min=2, max=10), stop=stop_after_attempt(5))
-    def _call(self, prompt: ChatPromptTemplate, args: dict) -> str:
-        chain = prompt | self.llm
+    def _call_structured(self, prompt: ChatPromptTemplate, args: dict, output_schema: type) -> BaseModel:
+        structured_llm = self.llm.with_structured_output(output_schema)
+        chain = prompt | structured_llm
         response = chain.invoke(args)
         time.sleep(0.5)
-        return response.content.strip()
-
-    def _parse_json(self, raw: str) -> dict:
-        """Strip markdown fences and parse JSON."""
-        text = raw.strip()
-        if text.startswith("```json"):
-            text = text[7:]
-        if text.startswith("```"):
-            text = text[3:]
-        if text.endswith("```"):
-            text = text[:-3]
-        return json.loads(text.strip())
+        return response
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -118,27 +163,27 @@ Graph Context (multi-hop):
 {graph_context}""")
     ])
 
-    def research(self, query: str, rules_with_scores: List[tuple], graph_context: str) -> dict:
+    def research(self, query: str, rules_with_scores: List[tuple], graph_context: str) -> ResearchResult:
         rules_context = "\n\n---\n\n".join(
             f"[{r.id} | {r.domain} | {r.amc_gm_info} | rerank_score={s:.3f}]\n{r.source_title}\n{r.text[:500]}"
             for r, s in rules_with_scores
         )
         try:
-            raw = self._call(self.PROMPT, {
+            return self._call_structured(self.PROMPT, {
                 "query": query,
                 "rules_context": rules_context,
                 "graph_context": graph_context,
-            })
-            return self._parse_json(raw)
+            }, ResearchResult)
         except Exception as e:
-            return {
-                "primary_rules": [r.id for r, _ in rules_with_scores if _ >= RERANK_THRESHOLD],
-                "noise_rules": [r.id for r, _ in rules_with_scores if _ < RERANK_THRESHOLD],
-                "core_topic": "Unknown",
-                "cross_domain_links": [],
-                "regulatory_brief": f"Research agent error: {e}",
-                "coverage_gaps": [],
-            }
+            print(f"Error in ResearcherAgent: {e}")
+            return ResearchResult(
+                primary_rules=[r.id for r, s in rules_with_scores if s >= RERANK_THRESHOLD],
+                noise_rules=[r.id for r, s in rules_with_scores if s < RERANK_THRESHOLD],
+                core_topic="General",
+                cross_domain_links=[],
+                regulatory_brief=f"Research agent encountered an error: {e}",
+                coverage_gaps=[]
+            )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -192,7 +237,7 @@ Known graph conflicts:
     ])
 
     def detect(self, rules: List[EasaRequirement], graph_conflicts: List[Dict],
-               core_topic: str = "General") -> dict:
+               core_topic: str = "General") -> ConflictResult:
         rules_context = "\n\n---\n\n".join(
             f"[{r.id} | {r.domain} | {r.amc_gm_info}]\n{r.source_title}\n{r.text[:600]}"
             for r in rules
@@ -211,16 +256,20 @@ Known graph conflicts:
         cross_agency_str = json.dumps(cross_agency, indent=2) if cross_agency else "No cross-agency data for this topic."
 
         try:
-            raw = self._call(self.PROMPT, {
+            return self._call_structured(self.PROMPT, {
                 "core_topic": core_topic,
                 "rules_context": rules_context,
                 "cross_agency_data": cross_agency_str,
                 "graph_conflicts": graph_str,
-            })
-            return self._parse_json(raw)
+            }, ConflictResult)
         except Exception as e:
-            return {"core_topic": core_topic, "cross_agency_analysis": [],
-                    "conflicts": [], "summary": f"Conflict detection error: {e}"}
+            print(f"Error in ConflictDetectorAgent: {e}")
+            return ConflictResult(
+                core_topic=core_topic,
+                cross_agency_analysis=[],
+                conflicts=[],
+                summary=f"Conflict detection error: {e}"
+            )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -274,7 +323,7 @@ Visual Evidence Indicators:
     ])
 
     def audit(self, requirement: EasaRequirement, chunks: List[ManualChunk],
-              research_brief: str, conflict_report: str, graph_chain: str) -> dict:
+              research_brief: str, conflict_report: str, graph_chain: str) -> AuditResult:
         manual_context = "\n\n---\n\n".join(
             f"[Page {c.page_number} | Section: {c.section_title}]\n{c.content}"
             for c in chunks[:5]
@@ -288,7 +337,7 @@ Visual Evidence Indicators:
         visual_indicators = "\n".join(visual_parts) if visual_parts else "No visual elements detected."
 
         try:
-            raw = self._call(self.PROMPT, {
+            return self._call_structured(self.PROMPT, {
                 "req_id": requirement.id,
                 "law_type": requirement.amc_gm_info or "Unknown",
                 "req_text": requirement.text,
@@ -297,19 +346,19 @@ Visual Evidence Indicators:
                 "graph_chain": graph_chain,
                 "manual_context": manual_context,
                 "visual_indicators": visual_indicators,
-            })
-            return self._parse_json(raw)
+            }, AuditResult)
         except Exception as e:
-            return {
-                "requirement_id": requirement.id,
-                "status": "Requires Human Review",
-                "evidence_quote": f"Auditor error: {e}",
-                "source_reference": "N/A",
-                "confidence_score": 0.0,
-                "suggested_fix": None,
-                "cross_refs_used": [],
-                "visual_evidence_pages": [],
-            }
+            print(f"Error in AuditorAgent: {e}")
+            return AuditResult(
+                requirement_id=requirement.id,
+                status=AuditStatus.REQUIRES_HUMAN_REVIEW,
+                evidence_quote=f"Auditor error: {e}",
+                source_reference="N/A",
+                confidence_score=0.0,
+                suggested_fix=None,
+                cross_refs_used=[],
+                visual_evidence_pages=[]
+            )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -362,8 +411,8 @@ FULL Original Manual Text (for back-link verification):
 {manual_source_text}""")
     ])
 
-    def validate(self, audit_result: dict, cited_chunks: List[ManualChunk],
-                 all_chunks: Optional[List[ManualChunk]] = None) -> dict:
+    def validate(self, audit_result: AuditResult, cited_chunks: List[ManualChunk],
+                  all_chunks: Optional[List[ManualChunk]] = None) -> CriticResult:
         # Use ALL chunks for back-link verification, not just cited ones
         source_chunks = all_chunks[:10] if all_chunks else cited_chunks[:5]
         manual_source = "\n\n---\n\n".join(
@@ -372,26 +421,26 @@ FULL Original Manual Text (for back-link verification):
         ) or "No source material available."
 
         try:
-            raw = self._call(self.PROMPT, {
-                "req_id": audit_result.get("requirement_id", "UNKNOWN"),
-                "status": audit_result.get("status", "Unknown"),
-                "evidence_quote": audit_result.get("evidence_quote", ""),
-                "source_reference": audit_result.get("source_reference", ""),
-                "confidence_score": audit_result.get("confidence_score", 0.0),
-                "suggested_fix": audit_result.get("suggested_fix", "None"),
+            return self._call_structured(self.PROMPT, {
+                "req_id": audit_result.requirement_id,
+                "status": audit_result.status,
+                "evidence_quote": audit_result.evidence_quote,
+                "source_reference": audit_result.source_reference,
+                "confidence_score": audit_result.confidence_score,
+                "suggested_fix": audit_result.suggested_fix or "None",
                 "manual_source_text": manual_source,
-            })
-            return self._parse_json(raw)
+            }, CriticResult)
         except Exception as e:
-            return {
-                "validation_score": 0.0,
-                "evidence_verified": False,
-                "citation_verified": False,
-                "status_justified": False,
-                "correct_citation": None,
-                "critique": f"Critic agent error: {e}",
-                "suggested_fix_valid": None,
-            }
+            print(f"Error in CriticAgent: {e}")
+            return CriticResult(
+                validation_score=0.0,
+                evidence_verified=False,
+                citation_verified=False,
+                status_justified=False,
+                correct_citation=None,
+                critique=f"Critic agent error: {e}",
+                suggested_fix_valid=None
+            )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -484,14 +533,17 @@ class ComplianceBoard:
             )
         except Exception as e:
             print(f"[SELF-HEAL] Researcher failed for {requirement.id}: {e}")
-            research_result = {"primary_rules": [], "noise_rules": [], "core_topic": "General",
-                               "regulatory_brief": "Research unavailable due to error."}
+            research_result = ResearchResult(
+                primary_rules=[], noise_rules=[], core_topic="General",
+                cross_domain_links=[], regulatory_brief="Research unavailable due to error.",
+                coverage_gaps=[]
+            )
             trace_parts.append(f"RESEARCHER: FAILED — {type(e).__name__}")
 
-        noise_rules = research_result.get("noise_rules", [])
-        core_topic = research_result.get("core_topic", "General")
+        noise_rules = research_result.noise_rules
+        core_topic = research_result.core_topic
         trace_parts.append(
-            f"RESEARCHER: topic={core_topic}, primary={len(research_result.get('primary_rules', []))}, "
+            f"RESEARCHER: topic={core_topic}, primary={len(research_result.primary_rules)}, "
             f"noise={len(noise_rules)}"
         )
 
@@ -500,7 +552,7 @@ class ComplianceBoard:
             trace_parts.append("NOISE_GATE: Requirement flagged as Noise/Informational — skipping full audit.")
             return ComplianceAudit(
                 requirement_id=requirement.id,
-                status="Informational",
+                status=AuditStatus.INFORMATIONAL,
                 evidence_quote="Flagged as noise by re-ranker (score < 0.85).",
                 source_reference="N/A",
                 confidence_score=0.0,
@@ -524,11 +576,14 @@ class ComplianceBoard:
             )
         except Exception as e:
             print(f"[SELF-HEAL] ConflictDetector failed for {requirement.id}: {e}")
-            conflict_result = {"conflicts": [], "summary": "Conflict analysis unavailable."}
+            conflict_result = ConflictResult(
+                core_topic=core_topic, cross_agency_analysis=[],
+                conflicts=[], summary="Conflict analysis unavailable."
+            )
             trace_parts.append(f"CONFLICT_DETECTOR: FAILED — {type(e).__name__}")
 
-        n_conflicts = len(conflict_result.get("conflicts", []))
-        trace_parts.append(f"CONFLICT_DETECTOR: {n_conflicts} conflict(s) found — {conflict_result.get('summary', 'N/A')}")
+        n_conflicts = len(conflict_result.conflicts)
+        trace_parts.append(f"CONFLICT_DETECTOR: {n_conflicts} conflict(s) found — {conflict_result.summary}")
 
         # ── Stage 2.5: Multimodal Vision (if diagrams present) ────────────
         visual_description = ""
@@ -549,7 +604,7 @@ class ComplianceBoard:
 
         # ── Stage 3: Audit ────────────────────────────────────────────────
         # Inject visual description into research brief
-        research_brief = research_result.get("regulatory_brief", "")
+        research_brief = research_result.regulatory_brief
         if visual_description:
             research_brief += f"\n\nMultimodal Evidence:\n{visual_description}"
 
@@ -561,24 +616,25 @@ class ComplianceBoard:
                 requirement=requirement,
                 chunks=manual_chunks,
                 research_brief=research_brief,
-                conflict_report=conflict_result.get("summary", ""),
+                conflict_report=conflict_result.summary,
                 graph_chain=graph_context,
             )
         except Exception as e:
             print(f"[SELF-HEAL] Auditor failed for {requirement.id}: {e}")
-            audit_result = {
-                "requirement_id": requirement.id,
-                "status": "Requires Human Review",
-                "evidence_quote": "Audit agent encountered an error.",
-                "source_reference": "N/A",
-                "confidence_score": 0.0,
-                "suggested_fix": f"Manual review required. Auditor error: {str(e)[:150]}",
-                "cross_refs_used": [],
-            }
+            audit_result = AuditResult(
+                requirement_id=requirement.id,
+                status=AuditStatus.REQUIRES_HUMAN_REVIEW,
+                evidence_quote="Audit agent encountered an error.",
+                source_reference="N/A",
+                confidence_score=0.0,
+                suggested_fix=f"Manual review required. Auditor error: {str(e)[:150]}",
+                cross_refs_used=[],
+                visual_evidence_pages=[]
+            )
             trace_parts.append(f"AUDITOR: FAILED — {type(e).__name__}")
 
         # 🔐 OUTPUT SANITIZATION: Check audit output
-        quote = audit_result.get("evidence_quote", "")
+        quote = audit_result.evidence_quote
         if "ignore" in quote.lower() or "system prompt" in quote.lower():
             audit_result["evidence_quote"] = "[🛡️ Redacted by Guardrail]"
 

@@ -57,17 +57,9 @@ class ComplianceEngine:
         self.model_name = model_name
         self._api_key = api_key
 
-        # Local embeddings — no API quota, no rate limits
-        self.embeddings = HuggingFaceEmbeddings(
-            model_name="all-MiniLM-L6-v2",
-            model_kwargs={"device": "cpu"},
-            encode_kwargs={"normalize_embeddings": True}
-        )
-
-        # Cross-Encoder for re-ranking (local, ~80MB)
-        print("Loading Cross-Encoder re-ranker...")
-        self.cross_encoder = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
-        print("Cross-Encoder loaded.")
+        # Lazy-loaded models
+        self._embeddings: Optional[HuggingFaceEmbeddings] = None
+        self._cross_encoder: Optional[CrossEncoder] = None
 
         # LLM for chat / legacy single-agent
         self.llm = ChatGoogleGenerativeAI(
@@ -82,6 +74,38 @@ class ComplianceEngine:
         # 4-Agent Compliance Board
         self.compliance_board = ComplianceBoard(api_key=api_key, model_name=model_name)
 
+        # Chat prompt (for Q&A tab)
+        self._init_chat_prompt()
+
+        # Data stores
+        self.vectorstore: Optional[FAISS] = None
+        self.bm25_index: Optional[BM25Okapi] = None
+        self.bm25_doc_ids: List[str] = []
+        self.manual_chunks: List[ManualChunk] = []
+        self.rule_to_chunks: Dict[str, List[ManualChunk]] = defaultdict(list)
+        self.pre_filtered: bool = False
+        self._rule_lookup: Dict[str, EasaRequirement] = {}
+        self._all_rules: List[EasaRequirement] = []
+
+    @property
+    def embeddings(self) -> HuggingFaceEmbeddings:
+        if self._embeddings is None:
+            print("Lazy-loading HuggingFace Embeddings...")
+            self._embeddings = HuggingFaceEmbeddings(
+                model_name="all-MiniLM-L6-v2",
+                model_kwargs={"device": "cpu"},
+                encode_kwargs={"normalize_embeddings": True}
+            )
+        return self._embeddings
+
+    @property
+    def cross_encoder(self) -> CrossEncoder:
+        if self._cross_encoder is None:
+            print("Lazy-loading Cross-Encoder re-ranker...")
+            self._cross_encoder = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+        return self._cross_encoder
+
+    def _init_chat_prompt(self):
         # Chat prompt (for Q&A tab)
         self.chat_prompt = ChatPromptTemplate.from_messages([
             ("system", """You are a senior EASA regulatory expert and compliance advisor.
@@ -101,16 +125,6 @@ Cross-Referenced Rules:
 {cross_ref_context}
 """)
         ])
-
-        # Data stores
-        self.vectorstore: Optional[FAISS] = None
-        self.bm25_index: Optional[BM25Okapi] = None
-        self.bm25_doc_ids: List[str] = []
-        self.manual_chunks: List[ManualChunk] = []
-        self.rule_to_chunks: Dict[str, List[ManualChunk]] = defaultdict(list)
-        self.pre_filtered: bool = False
-        self._rule_lookup: Dict[str, EasaRequirement] = {}
-        self._all_rules: List[EasaRequirement] = []
 
     # ──────────────────────────────────────────────────────────────────────────
     # Index Building
