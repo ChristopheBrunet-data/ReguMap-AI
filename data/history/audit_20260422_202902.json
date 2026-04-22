@@ -1,0 +1,38 @@
+[
+  {
+    "requirement_id": "ERULES-1963177438-22573",
+    "status": "Gap",
+    "evidence_quote": "None",
+    "source_reference": "None",
+    "confidence_score": 1.0,
+    "suggested_fix": "Ensure this regulatory requirement is documented in the manual.",
+    "cross_refs_used": [],
+    "validation_score": null,
+    "evidence_crop_path": null,
+    "agent_trace": "SKIP: No matching manual chunks (below threshold)."
+  },
+  {
+    "requirement_id": "ERULES-1963177438-1845",
+    "status": "Gap",
+    "evidence_quote": "None",
+    "source_reference": "None",
+    "confidence_score": 1.0,
+    "suggested_fix": "Ensure this regulatory requirement is documented in the manual.",
+    "cross_refs_used": [],
+    "validation_score": null,
+    "evidence_crop_path": null,
+    "agent_trace": "SKIP: No matching manual chunks (below threshold)."
+  },
+  {
+    "requirement_id": "ERULES-1963177438-4661",
+    "status": "Gap",
+    "evidence_quote": "None",
+    "source_reference": "None",
+    "confidence_score": 1.0,
+    "suggested_fix": "Ensure this regulatory requirement is documented in the manual.",
+    "cross_refs_used": [],
+    "validation_score": null,
+    "evidence_crop_path": null,
+    "agent_trace": "SKIP: No matching manual chunks (below threshold)."
+  }
+]

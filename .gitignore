@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+
+# Sensitive Data & Environment
+.env
+.flaskenv
+*.enc
+data/logs/
+data/watchdog/*.json
+data/graph/*.json.enc
+data/easa/
+data/evidence/
+
+# Streamlit
+.streamlit/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project Specific
+OM_A_*.pdf
+temp_*.pdf
+*.log
+scratch/

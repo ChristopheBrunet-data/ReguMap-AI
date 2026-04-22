@@ -1,0 +1,10 @@
+[
+  {
+    "requirement_id": "ERULES-1963177438-2087",
+    "status": "Gap",
+    "evidence_quote": "None",
+    "source_reference": "None",
+    "confidence_score": 1.0,
+    "suggested_fix": "The Airline Operator Manual needs to include a section detailing the aerodrome operator's obligation to obtain the applicable certificate(s) issued by the Competent Authority prior to commencing the operation of an aerodrome, as mandated by ADR.OR.B.005. This section should outline the process, responsible parties, and documentation related to this certification."
+  }
+]
