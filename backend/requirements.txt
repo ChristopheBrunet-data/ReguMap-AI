@@ -21,6 +21,7 @@ rank-bm25
 sentence-transformers
 networkx
 langchain-huggingface
+neo4j
 
 # API Layer (Sprint 1)
 fastapi>=0.100.0
