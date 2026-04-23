@@ -11,8 +11,8 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from api.dependencies import get_engine
-from api.schemas import (
+from api_pkg.dependencies import get_engine
+from api_pkg.schemas import (
     QARequest,
     QAResponse,
     SearchRequest,

@@ -22,9 +22,9 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.dependencies import initialize_engine, is_engine_ready, shutdown_engine
-from api.routes import compliance, graph, ingestion, search
-from api.schemas import HealthResponse, HealthStatus
+from api_pkg.dependencies import initialize_engine, is_engine_ready, shutdown_engine
+from api_pkg.routes import compliance, graph, ingestion, search
+from api_pkg.schemas import HealthResponse, HealthStatus
 
 # Load environment variables
 load_dotenv()
@@ -141,7 +141,7 @@ app.include_router(ingestion.router, prefix=API_PREFIX)
 )
 async def health_check():
     """Returns service health, engine readiness, and loaded data counts."""
-    from api.dependencies import _engine_instance
+    from api_pkg.dependencies import _engine_instance
 
     engine = _engine_instance
     if engine is None:

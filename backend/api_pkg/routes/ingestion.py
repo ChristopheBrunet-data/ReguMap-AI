@@ -16,8 +16,8 @@ import time
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
-from api.dependencies import get_engine
-from api.schemas import ErrorResponse, IngestionStatusResponse
+from api_pkg.dependencies import get_engine
+from api_pkg.schemas import ErrorResponse, IngestionStatusResponse
 from engine import ComplianceEngine
 from parser import EasaXmlParser, ManualPdfParser
 

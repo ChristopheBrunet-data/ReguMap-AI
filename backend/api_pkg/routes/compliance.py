@@ -16,8 +16,8 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from api.dependencies import get_engine
-from api.schemas import (
+from api_pkg.dependencies import get_engine
+from api_pkg.schemas import (
     AuditRequest,
     AuditResultResponse,
     AuditStatusResponse,

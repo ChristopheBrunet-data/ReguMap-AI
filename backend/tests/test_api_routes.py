@@ -30,8 +30,8 @@ def mock_engine():
 @pytest.fixture
 def client(mock_engine):
     """Creates a test client with the mock engine injected."""
-    from api.main import app
-    from api.dependencies import get_engine
+    from api_pkg.main import app
+    from api_pkg.dependencies import get_engine
 
     app.dependency_overrides[get_engine] = lambda: mock_engine
     with TestClient(app) as c:
@@ -53,8 +53,8 @@ class TestHealth:
 
     def test_health_degraded_no_engine(self):
         """Health should report DEGRADED when engine is not initialized."""
-        from api.main import app
-        from api.dependencies import get_engine
+        from api_pkg.main import app
+        from api_pkg.dependencies import get_engine
         # Don't override the dependency — let it use the real check
         with TestClient(app) as c:
             response = c.get("/health")
@@ -71,13 +71,13 @@ class TestHealth:
 
 class TestAPISchemas:
     def test_audit_request_validation(self):
-        from api.schemas import AuditRequest
+        from api_pkg.schemas import AuditRequest
         req = AuditRequest(requirement_id="ADR.OR.B.005")
         assert req.requirement_id == "ADR.OR.B.005"
         assert req.refined_question == "Standard Compliance Check"
 
     def test_audit_request_custom_question(self):
-        from api.schemas import AuditRequest
+        from api_pkg.schemas import AuditRequest
         req = AuditRequest(
             requirement_id="ORO.FTL.210",
             refined_question="How are FTL limits documented?",
@@ -85,30 +85,30 @@ class TestAPISchemas:
         assert req.refined_question == "How are FTL limits documented?"
 
     def test_batch_request_validation(self):
-        from api.schemas import BatchAuditRequest
+        from api_pkg.schemas import BatchAuditRequest
         req = BatchAuditRequest(
             requirement_ids=["ADR.OR.B.005", "ORO.FTL.210"]
         )
         assert len(req.requirement_ids) == 2
 
     def test_batch_request_max_limit(self):
-        from api.schemas import BatchAuditRequest
+        from api_pkg.schemas import BatchAuditRequest
         with pytest.raises(Exception):
             BatchAuditRequest(requirement_ids=["rule"] * 51)
 
     def test_search_request_defaults(self):
-        from api.schemas import SearchRequest
+        from api_pkg.schemas import SearchRequest
         req = SearchRequest(query="landing gear")
         assert req.k == 5
         assert req.domain_filter is None
 
     def test_graph_traverse_request(self):
-        from api.schemas import GraphTraverseRequest
+        from api_pkg.schemas import GraphTraverseRequest
         req = GraphTraverseRequest(node_id="ADR.OR.B.005", depth=3)
         assert req.depth == 3
 
     def test_health_response(self):
-        from api.schemas import HealthResponse, HealthStatus
+        from api_pkg.schemas import HealthResponse, HealthStatus
         h = HealthResponse(status=HealthStatus.OK, version="1.0.0")
         assert h.status == HealthStatus.OK
         assert h.engine_ready is False
