@@ -30,6 +30,10 @@ ENV/
 .env
 .flaskenv
 *.enc
+gitkey
+gitkey.pub
+
+# Data (generated at runtime)
 data/logs/
 data/watchdog/*.json
 data/graph/*.json.enc
@@ -48,11 +52,3 @@ OM_A_*.pdf
 temp_*.pdf
 *.log
 scratch/
-gitkey
-gitkey.pub
-gitkey
-gitkey.pub
-.env
-__pycache__/
-.venv/
-data/

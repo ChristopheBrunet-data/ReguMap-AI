@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Sample S1000D Issue 5.0 Data Module for ReguMap-AI testing.
+  Represents a Landing Gear Removal Procedure for A320 aircraft.
+  Contains: full identification, effectivity block, procedural steps,
+  warnings, cautions, notes, DM references, and figure references.
+-->
+<dmodule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <identAndStatusSection>
+    <dmAddress>
+      <dmIdent>
+        <dmCode modelIdentCode="A320" systemDiffCode="A"
+                systemCode="32" subSystemCode="00"
+                subSubSystemCode="00" assyCode="00"
+                disassyCode="00" disassyCodeVariant="A"
+                infoCode="520" infoCodeVariant="A"
+                itemLocationCode="A"/>
+        <language languageIsoCode="en" countryIsoCode="US"/>
+        <issueInfo issueNumber="003" inWork="01"/>
+      </dmIdent>
+      <dmAddressItems>
+        <issueDate year="2026" month="03" day="15"/>
+        <dmTitle>
+          <techName>Main landing gear assembly</techName>
+          <infoName>Removal procedure</infoName>
+        </dmTitle>
+      </dmAddressItems>
+    </dmAddress>
+    <dmStatus>
+      <security securityClassification="01"/>
+      <responsiblePartnerCompany>
+        <enterpriseName>Airbus SAS</enterpriseName>
+      </responsiblePartnerCompany>
+      <originator>
+        <enterpriseName>ReguMap AI Test Suite</enterpriseName>
+      </originator>
+      <applic>
+        <displayText>
+          <simplePara>Applicable to A320-214 MSN 1001 through 1050</simplePara>
+        </displayText>
+        <applicCrossRefTableRef>
+          <assign applicPropertyIdent="MSN" applicPropertyType="prodattr" applicPropertyValues="1001 1005 1010 1022 1035 1050"/>
+          <assign applicPropertyIdent="FleetType" applicPropertyType="prodattr" applicPropertyValues="A320-214 A320-232"/>
+          <assign applicPropertyIdent="SerialRange" applicPropertyType="prodattr" applicPropertyValues="1001-1050"/>
+        </applicCrossRefTableRef>
+      </applic>
+      <qualityAssurance>
+        <firstVerification verificationType="tabtop"/>
+      </qualityAssurance>
+    </dmStatus>
+  </identAndStatusSection>
+
+  <content>
+    <procedure>
+      <preliminaryRqmts>
+        <reqCondGroup>
+          <reqCondDm>
+            <reqCond>
+              <dmRef>
+                <dmRefIdent>
+                  <dmCode modelIdentCode="A320" systemCode="32"
+                          subSystemCode="00" subSubSystemCode="00"
+                          assyCode="00" disassyCode="00"
+                          disassyCodeVariant="A" infoCode="040"
+                          infoCodeVariant="A" itemLocationCode="A"/>
+                </dmRefIdent>
+                <dmRefAddressItems>
+                  <dmTitle>
+                    <techName>Main landing gear assembly</techName>
+                    <infoName>Description and operation</infoName>
+                  </dmTitle>
+                </dmRefAddressItems>
+              </dmRef>
+            </reqCond>
+          </reqCondDm>
+          <reqCondDm>
+            <reqCond>
+              <dmRef>
+                <dmRefIdent>
+                  <dmCode modelIdentCode="A320" systemCode="12"
+                          subSystemCode="10" subSubSystemCode="00"
+                          assyCode="00" disassyCode="00"
+                          disassyCodeVariant="A" infoCode="920"
+                          infoCodeVariant="A" itemLocationCode="A"/>
+                </dmRefIdent>
+                <dmRefAddressItems>
+                  <dmTitle>
+                    <techName>Hydraulic system</techName>
+                    <infoName>Servicing</infoName>
+                  </dmTitle>
+                </dmRefAddressItems>
+              </dmRef>
+            </reqCond>
+          </reqCondDm>
+        </reqCondGroup>
+
+        <reqSupportEquips>
+          <supportEquipDescrGroup>
+            <supportEquipDescr>
+              <name>Hydraulic jack — 15-ton capacity</name>
+              <identNumber><manufacturerCode>HYDCO</manufacturerCode><partAndSerialNumber><partNumber>HJ-15T-MK3</partNumber></partAndSerialNumber></identNumber>
+            </supportEquipDescr>
+            <supportEquipDescr>
+              <name>Landing gear transport dolly</name>
+              <identNumber><manufacturerCode>TOOLS</manufacturerCode><partAndSerialNumber><partNumber>LG-DOLLY-320</partNumber></partAndSerialNumber></identNumber>
+            </supportEquipDescr>
+          </supportEquipDescrGroup>
+        </reqSupportEquips>
+
+        <reqSafety>
+          <safetyRqmts>
+            <warning>
+              <warningAndCautionPara>ENSURE aircraft is on jacks and all hydraulic pressure is released before starting this procedure. Failure to do so may result in serious injury or death.</warningAndCautionPara>
+            </warning>
+            <warning>
+              <warningAndCautionPara>The main landing gear assembly weighs approximately 1,200 kg. Use approved lifting equipment at all times. Refer to AMM 32-10-00 for weight and balance data.</warningAndCautionPara>
+            </warning>
+            <caution>
+              <warningAndCautionPara>Do not use pneumatic tools on torque-critical fasteners. Use calibrated manual torque wrenches only as specified in ADR.OR.B.005.</warningAndCautionPara>
+            </caution>
+          </safetyRqmts>
+        </reqSafety>
+      </preliminaryRqmts>
+
+      <mainProcedure>
+        <proceduralStep>
+          <para>Position the aircraft on jacks in accordance with the Aircraft Jacking procedure (AMM 07-10-00).</para>
+          <note>
+            <notePara>Ensure the jacking area is clear of all non-essential personnel before raising the aircraft.</notePara>
+          </note>
+        </proceduralStep>
+
+        <proceduralStep>
+          <para>Release hydraulic pressure from the landing gear system:</para>
+          <proceduralStep>
+            <para>Open the hydraulic system isolation valve on Panel 32-1A.</para>
+          </proceduralStep>
+          <proceduralStep>
+            <para>Verify zero pressure on gauge P32-G1 (expected: 0 ± 5 PSI).</para>
+            <caution>
+              <warningAndCautionPara>If residual pressure exceeds 50 PSI, do not proceed. Contact hydraulic maintenance team.</warningAndCautionPara>
+            </caution>
+          </proceduralStep>
+          <proceduralStep>
+            <para>Place safety locks on the hydraulic isolation valve.</para>
+          </proceduralStep>
+        </proceduralStep>
+
+        <proceduralStep>
+          <para>Disconnect the electrical harness from the landing gear control unit (LGCU):</para>
+          <proceduralStep>
+            <para>Disconnect connector J32-P1 (24-pin Deutsch connector).</para>
+          </proceduralStep>
+          <proceduralStep>
+            <para>Disconnect connector J32-P2 (weight-on-wheels sensor).</para>
+          </proceduralStep>
+          <proceduralStep>
+            <para>Cap all disconnected connectors with approved dust caps (part number DC-24-A).</para>
+          </proceduralStep>
+        </proceduralStep>
+
+        <proceduralStep>
+          <para>Remove the main landing gear attachment bolts (6x AN8-32A bolts, torque value: 450 ± 25 in-lb).</para>
+          <warning>
+            <warningAndCautionPara>Support the landing gear assembly with the hydraulic jack before removing the final attachment bolt. Unsupported gear may fall causing fatal injury.</warningAndCautionPara>
+          </warning>
+          <para>Refer to the following figure for bolt locations:</para>
+          <figure>
+            <title>Main Landing Gear Attachment Points — Forward View</title>
+            <graphic infoEntityIdent="ICN-A320-32-00-00-00AA-520A-A-001-01"/>
+          </figure>
+        </proceduralStep>
+
+        <proceduralStep>
+          <para>Lower the landing gear assembly onto the transport dolly using the hydraulic jack.</para>
+          <note>
+            <notePara>Two technicians are required for this step as per ORO.GEN.200 minimum staffing requirements.</notePara>
+          </note>
+        </proceduralStep>
+
+        <proceduralStep>
+          <para>Perform final inspection of the landing gear bay:</para>
+          <proceduralStep>
+            <para>Inspect attachment point bushings for wear (limit: 0.005 inches).</para>
+          </proceduralStep>
+          <proceduralStep>
+            <para>Check hydraulic line connections for leaks.</para>
+          </proceduralStep>
+          <proceduralStep>
+            <para>Record inspection findings in the aircraft technical log per CAT.OP.MPA.150 requirements.</para>
+          </proceduralStep>
+        </proceduralStep>
+      </mainProcedure>
+
+      <closeRqmts>
+        <reqCondGroup>
+          <reqCondDm>
+            <reqCond>
+              <dmRef>
+                <dmRefIdent>
+                  <dmCode modelIdentCode="A320" systemCode="32"
+                          subSystemCode="00" subSubSystemCode="00"
+                          assyCode="00" disassyCode="00"
+                          disassyCodeVariant="A" infoCode="720"
+                          infoCodeVariant="A" itemLocationCode="A"/>
+                </dmRefIdent>
+                <dmRefAddressItems>
+                  <dmTitle>
+                    <techName>Main landing gear assembly</techName>
+                    <infoName>Installation procedure</infoName>
+                  </dmTitle>
+                </dmRefAddressItems>
+              </dmRef>
+            </reqCond>
+          </reqCondDm>
+        </reqCondGroup>
+      </closeRqmts>
+    </procedure>
+  </content>
+</dmodule>

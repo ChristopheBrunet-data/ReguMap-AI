@@ -14,29 +14,7 @@ import networkx as nx
 import security
 
 from schemas import EasaRequirement, ManualChunk, GraphNode, GraphEdge
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Regex patterns for EASA rule cross-references
-# ──────────────────────────────────────────────────────────────────────────────
-EASA_RULE_ID_PATTERN = re.compile(
-    r'\b([A-Z]{2,6}\.[A-Z]{2,5}\.[A-Z]{1,5}\.\d{3}(?:\.[a-z]\d*)?)\b'
-)
-
-# Maps domain short codes to full agency names
-DOMAIN_TO_AGENCY = {
-    "air-ops": "EASA",
-    "aerodromes": "EASA",
-    "aircrew": "EASA",
-    "continuing-airworthiness": "EASA",
-    "initial-airworthiness": "EASA",
-    "additional-airworthiness": "EASA",
-    "atm-ans": "EASA",
-    "sera": "EASA",
-    "ground-handling": "EASA",
-    "remote-atc": "EASA",
-    "large-rotorcraft": "EASA",
-    "info-security": "EASA",
-}
+from core_constants import EASA_RULE_ID_PATTERN, DOMAIN_TO_AGENCY
 
 
 class RegulatoryKnowledgeGraph:
@@ -278,7 +256,7 @@ class RegulatoryKnowledgeGraph:
     def persist(self):
         """Save graph to encrypted JSON file."""
         os.makedirs(os.path.dirname(self.persist_path), exist_ok=True)
-        data = nx.node_link_data(self.graph)
+        data = nx.node_link_data(self.graph, edges="links")
         security.secure_save_json(self.persist_path, data)
         print(f"Knowledge graph saved securely to {self.persist_path}")
 
@@ -286,7 +264,7 @@ class RegulatoryKnowledgeGraph:
         """Load graph from encrypted JSON file. Returns True if successful."""
         data = security.secure_load_json(self.persist_path)
         if data:
-            self.graph = nx.node_link_graph(data, directed=True)
+            self.graph = nx.node_link_graph(data, directed=True, edges="links")
             print(f"Knowledge graph loaded securely: {self.graph.number_of_nodes()} nodes.")
             return True
         return False

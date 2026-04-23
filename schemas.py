@@ -1,6 +1,30 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Any
 from enum import Enum
+
+class Alert(BaseModel):
+    feed_id: str
+    feed_source: str
+    title: str
+    summary: str
+    link: str
+    published: str
+    detected_at: str
+    criticality: str
+    rule_ids: List[str]
+    status: str
+    impact_analysis: Optional[Any] = None
+
+class ComplianceTask(BaseModel):
+    task_id: str
+    rule_id: str
+    target_manual_section: str
+    suggested_change: str
+    alert_feed_id: str
+    criticality: str
+    status: str
+    created_at: str
+    implemented_at: Optional[str] = None
 
 
 class AuditStatus(str, Enum):

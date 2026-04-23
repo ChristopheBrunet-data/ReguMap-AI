@@ -128,11 +128,11 @@ class ManualPdfParser:
         self._is_encrypted = self.pdf_path.endswith(".enc")
 
     def _compute_hash(self) -> str:
-        hasher = hashlib.md5()
-        mode = "rb"
-        with open(self.pdf_path, mode) as f:
-            buf = f.read()
-            hasher.update(buf)
+        """Computes a SHA-256 hash of the source PDF for version fingerprinting."""
+        hasher = hashlib.sha256()
+        with open(self.pdf_path, "rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
+                hasher.update(chunk)
         return hasher.hexdigest()
 
     def _open_doc(self) -> fitz.Document:

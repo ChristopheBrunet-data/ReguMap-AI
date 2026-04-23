@@ -12,6 +12,9 @@ import time
 import datetime
 import feedparser
 import requests
+from typing import List, Optional
+from schemas import Alert, ComplianceTask
+from core_constants import EASA_RULE_ID_PATTERN
 
 ALERTS_DIR = "data/watchdog"
 ALERTS_FILE = os.path.join(ALERTS_DIR, "alerts.json")
@@ -27,9 +30,7 @@ RSS_FEEDS = {
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
-EASA_RULE_ID_PATTERN = re.compile(
-    r'\b([A-Z]{2,6}\.[A-Z]{2,5}\.[A-Z]{1,5}\.\d{3}(?:\.[a-z]\d*)?)\b'
-)
+# Constants and directories
 
 
 def _init_dirs():
@@ -47,6 +48,31 @@ def _save_json(filepath: str, data: list):
     _init_dirs()
     with open(filepath, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+_ALERTS_CACHE: Optional[List[Alert]] = None
+_TASKS_CACHE: Optional[List[ComplianceTask]] = None
+
+def _load_alerts() -> List[Alert]:
+    global _ALERTS_CACHE
+    if _ALERTS_CACHE is None:
+        raw_data = _load_json(ALERTS_FILE)
+        _ALERTS_CACHE = [Alert(**a) for a in raw_data]
+    return _ALERTS_CACHE
+
+def _load_tasks() -> List[ComplianceTask]:
+    global _TASKS_CACHE
+    if _TASKS_CACHE is None:
+        raw_data = _load_json(TASKS_FILE)
+        _TASKS_CACHE = [ComplianceTask(**t) for t in raw_data]
+    return _TASKS_CACHE
+
+def flush_to_disk():
+    global _ALERTS_CACHE, _TASKS_CACHE
+    if _ALERTS_CACHE is not None:
+        _save_json(ALERTS_FILE, [a.model_dump() for a in _ALERTS_CACHE])
+    if _TASKS_CACHE is not None:
+        _save_json(TASKS_FILE, [t.model_dump() for t in _TASKS_CACHE])
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -80,14 +106,14 @@ def _extract_rule_ids(text: str) -> list:
 # Feed Monitor
 # ──────────────────────────────────────────────────────────────────────────────
 
-def scan_rss_feeds() -> list:
+def scan_rss_feeds() -> List[Alert]:
     """
     Scans all EASA RSS feeds for new entries not yet in our alert store.
     Returns list of NEW alert dicts.
     """
     _init_dirs()
-    existing_alerts = _load_json(ALERTS_FILE)
-    existing_ids = {a["feed_id"] for a in existing_alerts}
+    existing_alerts = _load_alerts()
+    existing_ids = {a.feed_id for a in existing_alerts}
 
     new_alerts = []
 
@@ -118,19 +144,19 @@ def scan_rss_feeds() -> list:
                 criticality = _classify_criticality(title, summary)
                 rule_ids = _extract_rule_ids(title + " " + summary)
 
-                alert = {
-                    "feed_id": feed_id,
-                    "feed_source": feed_name,
-                    "title": title,
-                    "summary": summary[:500],
-                    "link": link,
-                    "published": published or datetime.datetime.now().isoformat(),
-                    "detected_at": datetime.datetime.now().isoformat(),
-                    "criticality": criticality,
-                    "rule_ids": rule_ids,
-                    "status": "new",  # new | reviewed | archived
-                    "impact_analysis": None,
-                }
+                alert = Alert(
+                    feed_id=feed_id,
+                    feed_source=feed_name,
+                    title=title,
+                    summary=summary[:500],
+                    link=link,
+                    published=published or datetime.datetime.now().isoformat(),
+                    detected_at=datetime.datetime.now().isoformat(),
+                    criticality=criticality,
+                    rule_ids=rule_ids,
+                    status="new",
+                    impact_analysis=None,
+                )
                 new_alerts.append(alert)
                 existing_ids.add(feed_id)
 
@@ -140,51 +166,50 @@ def scan_rss_feeds() -> list:
 
     # Persist all alerts
     if new_alerts:
-        all_alerts = existing_alerts + new_alerts
-        _save_json(ALERTS_FILE, all_alerts)
+        existing_alerts.extend(new_alerts)
+        flush_to_disk()
         print(f"Watchdog: {len(new_alerts)} new alert(s) detected.")
 
     return new_alerts
 
 
-def get_all_alerts() -> list:
+def get_all_alerts() -> List[Alert]:
     """Returns all alerts, newest first."""
-    alerts = _load_json(ALERTS_FILE)
-    alerts.sort(key=lambda a: a.get("detected_at", ""), reverse=True)
-    return alerts
+    alerts = _load_alerts()
+    return sorted(alerts, key=lambda a: a.detected_at, reverse=True)
 
 
 def get_new_alerts_count() -> int:
     """Returns count of alerts with status='new'."""
-    alerts = _load_json(ALERTS_FILE)
-    return sum(1 for a in alerts if a.get("status") == "new")
+    alerts = _load_alerts()
+    return sum(1 for a in alerts if a.status == "new")
 
 
 def mark_alert_reviewed(feed_id: str):
     """Mark an alert as reviewed."""
-    alerts = _load_json(ALERTS_FILE)
+    alerts = _load_alerts()
     for a in alerts:
-        if a["feed_id"] == feed_id:
-            a["status"] = "reviewed"
-    _save_json(ALERTS_FILE, alerts)
+        if a.feed_id == feed_id:
+            a.status = "reviewed"
+    flush_to_disk()
 
 
 def archive_alert(feed_id: str):
     """Archive an alert."""
-    alerts = _load_json(ALERTS_FILE)
+    alerts = _load_alerts()
     for a in alerts:
-        if a["feed_id"] == feed_id:
-            a["status"] = "archived"
-    _save_json(ALERTS_FILE, alerts)
+        if a.feed_id == feed_id:
+            a.status = "archived"
+    flush_to_disk()
 
 
 def update_alert_impact(feed_id: str, impact_analysis: dict):
     """Attach impact analysis results to an alert."""
-    alerts = _load_json(ALERTS_FILE)
+    alerts = _load_alerts()
     for a in alerts:
-        if a["feed_id"] == feed_id:
-            a["impact_analysis"] = impact_analysis
-    _save_json(ALERTS_FILE, alerts)
+        if a.feed_id == feed_id:
+            a.impact_analysis = impact_analysis
+    flush_to_disk()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -197,58 +222,57 @@ def create_compliance_task(
     suggested_change: str,
     alert_feed_id: str = "",
     criticality: str = "MEDIUM",
-) -> dict:
+) -> ComplianceTask:
     """Creates a compliance task and persists it."""
-    task = {
-        "task_id": f"CT-{rule_id}-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}",
-        "rule_id": rule_id,
-        "target_manual_section": target_manual_section,
-        "suggested_change": suggested_change,
-        "alert_feed_id": alert_feed_id,
-        "criticality": criticality,
-        "status": "Pending",  # Pending | In Progress | Implemented | Archived
-        "created_at": datetime.datetime.now().isoformat(),
-        "implemented_at": None,
-    }
-    tasks = _load_json(TASKS_FILE)
+    task = ComplianceTask(
+        task_id=f"CT-{rule_id}-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}",
+        rule_id=rule_id,
+        target_manual_section=target_manual_section,
+        suggested_change=suggested_change,
+        alert_feed_id=alert_feed_id,
+        criticality=criticality,
+        status="Pending",
+        created_at=datetime.datetime.now().isoformat(),
+        implemented_at=None,
+    )
+    tasks = _load_tasks()
     tasks.append(task)
-    _save_json(TASKS_FILE, tasks)
+    flush_to_disk()
     return task
 
 
-def get_all_tasks() -> list:
+def get_all_tasks() -> List[ComplianceTask]:
     """Returns all compliance tasks, newest first."""
-    tasks = _load_json(TASKS_FILE)
-    tasks.sort(key=lambda t: t.get("created_at", ""), reverse=True)
-    return tasks
+    tasks = _load_tasks()
+    return sorted(tasks, key=lambda t: t.created_at, reverse=True)
 
 
 def get_pending_tasks_count() -> int:
     """Returns count of pending tasks."""
-    tasks = _load_json(TASKS_FILE)
-    return sum(1 for t in tasks if t.get("status") == "Pending")
+    tasks = _load_tasks()
+    return sum(1 for t in tasks if t.status == "Pending")
 
 
 def mark_task_implemented(task_id: str):
     """Mark a task as implemented."""
-    tasks = _load_json(TASKS_FILE)
+    tasks = _load_tasks()
     for t in tasks:
-        if t["task_id"] == task_id:
-            t["status"] = "Implemented"
-            t["implemented_at"] = datetime.datetime.now().isoformat()
-    _save_json(TASKS_FILE, tasks)
+        if t.task_id == task_id:
+            t.status = "Implemented"
+            t.implemented_at = datetime.datetime.now().isoformat()
+    flush_to_disk()
 
 
 def mark_task_in_progress(task_id: str):
     """Mark a task as in progress."""
-    tasks = _load_json(TASKS_FILE)
+    tasks = _load_tasks()
     for t in tasks:
-        if t["task_id"] == task_id:
-            t["status"] = "In Progress"
-    _save_json(TASKS_FILE, tasks)
+        if t.task_id == task_id:
+            t.status = "In Progress"
+    flush_to_disk()
 
 
-def run_impact_analysis(alert: dict, engine) -> dict:
+def run_impact_analysis(alert: Alert, engine) -> dict:
     """
     Runs the Researcher Agent to assess impact of a new rule on the uploaded manual.
     Returns an impact analysis dict.
@@ -256,9 +280,9 @@ def run_impact_analysis(alert: dict, engine) -> dict:
     if not engine or not engine.vectorstore:
         return {"error": "Engine not initialized. Run a Compliance Audit first."}
 
-    title = alert.get("title", "")
-    summary = alert.get("summary", "")
-    rule_ids = alert.get("rule_ids", [])
+    title = alert.title
+    summary = alert.summary
+    rule_ids = alert.rule_ids
     query = f"{title} {summary}"
 
     # Hybrid search to find affected manual sections
@@ -307,8 +331,8 @@ def run_impact_analysis(alert: dict, engine) -> dict:
             rule_id=rule_ids[0] if rule_ids else "UNKNOWN",
             target_manual_section=f"Page {section['page']}, {section['section']}",
             suggested_change=f"Review and update to reflect: {title}",
-            alert_feed_id=alert.get("feed_id", ""),
-            criticality=alert.get("criticality", "MEDIUM"),
+            alert_feed_id=alert.feed_id,
+            criticality=alert.criticality,
         )
 
     return impact

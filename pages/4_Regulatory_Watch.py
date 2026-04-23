@@ -23,18 +23,18 @@ with alert_tab:
         st.info("No alerts detected yet.")
     else:
         for alert in all_alerts[:20]:
-            with st.expander(f"[{alert.get('criticality')}] {alert['title']}"):
-                st.markdown(alert.get("summary", ""))
-                if st.button("Mark Reviewed", key=f"rev_{alert['feed_id']}"):
-                    watchdog.mark_alert_reviewed(alert["feed_id"])
+            with st.expander(f"[{alert.criticality}] {alert.title}"):
+                st.markdown(alert.summary or "")
+                if st.button("Mark Reviewed", key=f"rev_{alert.feed_id}"):
+                    watchdog.mark_alert_reviewed(alert.feed_id)
                     st.rerun()
 
 with task_tab:
     st.subheader("📋 Actionable Tasks")
     all_tasks = watchdog.get_all_tasks()
     for task in all_tasks:
-        with st.expander(f"{task['rule_id']} → {task['target_manual_section']}"):
-            st.markdown(f"**Action:** {task['suggested_change']}")
-            if st.button("Mark Implemented", key=f"task_{task['task_id']}"):
-                watchdog.mark_task_implemented(task["task_id"])
+        with st.expander(f"{task.rule_id} → {task.target_manual_section}"):
+            st.markdown(f"**Action:** {task.suggested_change}")
+            if st.button("Mark Implemented", key=f"task_{task.task_id}"):
+                watchdog.mark_task_implemented(task.task_id)
                 st.rerun()

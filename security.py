@@ -8,6 +8,8 @@ from cryptography.fernet import Fernet
 from typing import Optional, List, Dict
 from dotenv import load_dotenv
 
+logger = logging.getLogger(__name__)
+
 # ──────────────────────────────────────────────────────────────────────────────
 # 1. SECRET MANAGEMENT
 # ──────────────────────────────────────────────────────────────────────────────
@@ -18,7 +20,11 @@ load_dotenv()
 ENCRYPTION_KEY = os.getenv("APP_ENCRYPTION_KEY")
 if not ENCRYPTION_KEY:
     ENCRYPTION_KEY = Fernet.generate_key().decode()
-    # In production, this should be fetched from a Secret Manager
+    logger.warning(
+        "APP_ENCRYPTION_KEY not found in environment. Using an ephemeral key for this session. "
+        "Any data encrypted in this session will be UNRECOVERABLE after restart. "
+        "Set APP_ENCRYPTION_KEY in your .env file for persistent encryption."
+    )
 
 CIPHER = Fernet(ENCRYPTION_KEY.encode())
 
@@ -93,13 +99,16 @@ def sanitize_input(user_input: str) -> str:
     lowered = user_input.lower()
     for kw in INJECTION_KEYWORDS:
         if kw in lowered:
-            logging.warning(f"PROMPT INJECTION DETECTED: {user_input}")
+            logger.warning(f"PROMPT INJECTION DETECTED: {user_input}")
             raise SecurityException(f"Potential malicious instruction detected: '{kw}'")
     
-    # Path boundary check (basic)
-    if ".." in user_input or user_input.startswith("/") or ":" in user_input:
-        # Prevent absolute paths or directory traversal in queries
-        pass 
+    # Path traversal / absolute path check
+    if ".." in user_input:
+        logger.warning(f"PATH TRAVERSAL BLOCKED: {user_input}")
+        raise SecurityException("Path traversal patterns are not allowed in queries.")
+    if user_input.startswith("/") or (len(user_input) >= 2 and user_input[1] == ":"):
+        logger.warning(f"ABSOLUTE PATH BLOCKED: {user_input}")
+        raise SecurityException("Absolute file paths are not allowed in queries.")
         
     return user_input
 

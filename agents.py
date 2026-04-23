@@ -639,11 +639,11 @@ class ComplianceBoard:
         # 🔐 OUTPUT SANITIZATION: Check audit output
         quote = audit_result.evidence_quote
         if "ignore" in quote.lower() or "system prompt" in quote.lower():
-            audit_result["evidence_quote"] = "[🛡️ Redacted by Guardrail]"
+            audit_result.evidence_quote = "[🛡️ Redacted by Guardrail]"
 
         trace_parts.append(
-            f"AUDITOR: status={audit_result.get('status', '?')}, "
-            f"confidence={audit_result.get('confidence_score', 0)}"
+            f"AUDITOR: status={audit_result.status}, "
+            f"confidence={audit_result.confidence_score}"
         )
 
         # ── Stage 4: Critic — Back-link self-correction ───────────────────
@@ -655,38 +655,46 @@ class ComplianceBoard:
             )
         except Exception as e:
             print(f"[SELF-HEAL] Critic failed for {requirement.id}: {e}")
-            critic_result = {"validation_score": 0.0, "citation_verified": False, "evidence_verified": False}
+            critic_result = CriticResult(
+                validation_score=0.0,
+                evidence_verified=False,
+                citation_verified=False,
+                status_justified=False,
+                correct_citation=None,
+                critique=f"Critic agent error: {e}",
+                suggested_fix_valid=None,
+            )
             trace_parts.append(f"CRITIC: FAILED — {type(e).__name__}")
 
-        validation_score = critic_result.get("validation_score", 0.0)
-        correct_citation = critic_result.get("correct_citation")
+        validation_score = critic_result.validation_score
+        correct_citation = critic_result.correct_citation
 
         # Self-correction: if Critic found wrong citation, fix it
-        if correct_citation and not critic_result.get("citation_verified", True):
-            audit_result["source_reference"] = correct_citation
+        if correct_citation and not critic_result.citation_verified:
+            audit_result.source_reference = correct_citation
             trace_parts.append(f"CRITIC: SELF-CORRECTED citation to '{correct_citation}'")
         else:
             trace_parts.append(
                 f"CRITIC: validation={validation_score:.2f}, "
-                f"evidence_ok={critic_result.get('evidence_verified', False)}, "
-                f"citation_ok={critic_result.get('citation_verified', False)}"
+                f"evidence_ok={critic_result.evidence_verified}, "
+                f"citation_ok={critic_result.citation_verified}"
             )
 
         # ── Assemble final result ─────────────────────────────────────────
-        final_status = audit_result.get("status", "Requires Human Review")
-        confidence = audit_result.get("confidence_score", 0.0)
+        final_status = audit_result.status
+        confidence = audit_result.confidence_score
 
         if confidence < 0.6 or validation_score < 0.6:
-            final_status = "Requires Human Review"
+            final_status = AuditStatus.REQUIRES_HUMAN_REVIEW
 
         return ComplianceAudit(
-            requirement_id=audit_result.get("requirement_id", requirement.id),
+            requirement_id=audit_result.requirement_id,
             status=final_status,
-            evidence_quote=audit_result.get("evidence_quote", "None"),
-            source_reference=audit_result.get("source_reference", "N/A"),
+            evidence_quote=audit_result.evidence_quote,
+            source_reference=audit_result.source_reference,
             confidence_score=confidence,
-            suggested_fix=audit_result.get("suggested_fix"),
-            cross_refs_used=audit_result.get("cross_refs_used", []),
+            suggested_fix=audit_result.suggested_fix,
+            cross_refs_used=audit_result.cross_refs_used,
             validation_score=validation_score,
             evidence_crop_path=evidence_crop_path,
             agent_trace=" → ".join(trace_parts),

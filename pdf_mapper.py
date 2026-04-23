@@ -10,11 +10,7 @@ import re
 from typing import Dict, Optional, Tuple
 
 import fitz  # PyMuPDF
-
-# Regex matching EASA rule IDs: ADR.OR.B.005, ORO.GEN.200, CAT.OP.MPA.100, etc.
-EASA_RULE_ID_PATTERN = re.compile(
-    r'\b([A-Z]{2,6}\.[A-Z]{2,5}\.[A-Z]{1,5}\.\d{3}(?:\.[a-z]\d*)?)\b'
-)
+from core_constants import EASA_RULE_ID_PATTERN
 
 INDEX_DIR = "data/pdf_index"
 CROP_DIR = "data/evidence/pdf_crops"

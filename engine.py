@@ -15,6 +15,8 @@ import time
 from typing import List, Optional, Dict, Tuple
 from collections import defaultdict
 
+from core_constants import EASA_RULE_ID_PATTERN
+
 import numpy as np
 from rank_bm25 import BM25Okapi
 from sentence_transformers import CrossEncoder
@@ -31,10 +33,7 @@ from schemas import EasaRequirement, ManualChunk, ComplianceAudit
 from knowledge_graph import RegulatoryKnowledgeGraph
 from agents import ComplianceBoard
 
-# Regex matching EASA rule IDs: ADR.OR.B.005, ORO.GEN.200, CAT.OP.MPA.100, etc.
-EASA_RULE_ID_PATTERN = re.compile(
-    r'\b([A-Z]{2,6}\.[A-Z]{2,5}\.[A-Z]{1,5}\.\d{3}(?:\.[a-z]\d*)?)\b'
-)
+
 
 # Relevancy threshold — below this, flag as "Potential Regulatory Gap"
 RERANK_GAP_THRESHOLD = 0.6
@@ -101,8 +100,6 @@ class ComplianceEngine:
     @property
     def cross_encoder(self) -> CrossEncoder:
         if self._cross_encoder is None:
-            import traceback
-            traceback.print_stack()
             print("Lazy-loading Cross-Encoder re-ranker...")
             self._cross_encoder = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2", device="cpu")
         return self._cross_encoder
