@@ -21,3 +21,9 @@ rank-bm25
 sentence-transformers
 networkx
 langchain-huggingface
+
+# API Layer (Sprint 1)
+fastapi>=0.100.0
+uvicorn>=0.20.0
+python-multipart>=0.0.6
+httpx>=0.24.0
