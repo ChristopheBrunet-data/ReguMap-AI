@@ -51,7 +51,7 @@ class ComplianceEngine:
     - Disk-persisted FAISS index + graph
     """
 
-    def __init__(self, api_key: str, db_path: str = "data/vector_db/", model_name: str = "gemini-1.5-pro"):
+    def __init__(self, api_key: str, db_path: str = "data/vector_db/", model_name: str = "gemini-2.5-flash"):
         self.db_path = db_path
         self.model_name = model_name
         self._api_key = api_key

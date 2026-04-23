@@ -460,9 +460,9 @@ FULL Original Manual Text (for back-link verification):
 class VisionAnalyzer:
     """Uses Gemini Vision to analyze diagram/table crops from PDFs."""
 
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, model_name: str = "gemini-2.5-flash"):
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
+            model=model_name,
             temperature=0.0,
             google_api_key=api_key,
         )
@@ -503,7 +503,7 @@ class ComplianceBoard:
     Researcher (+ noise gate) → Conflict Detector (cross-agency) → Auditor (multimodal) → Critic (back-link)
     """
 
-    def __init__(self, api_key: str, model_name: str = "gemini-1.5-pro"):
+    def __init__(self, api_key: str, model_name: str = "gemini-2.5-flash"):
         llm = ChatGoogleGenerativeAI(
             model=model_name, temperature=0.0, google_api_key=api_key,
         )
@@ -511,7 +511,7 @@ class ComplianceBoard:
         self.conflict_detector = ConflictDetectorAgent(llm, "ConflictDetector")
         self.auditor = AuditorAgent(llm, "Auditor")
         self.critic = CriticAgent(llm, "Critic")
-        self.vision = VisionAnalyzer(api_key)
+        self.vision = VisionAnalyzer(api_key, model_name=model_name)
 
     def run_full_audit(
         self,

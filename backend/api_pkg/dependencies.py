@@ -59,8 +59,9 @@ def initialize_engine(api_key: Optional[str] = None) -> ComplianceEngine:
         )
 
     logger.info("Initializing ComplianceEngine...")
-    _engine_instance = ComplianceEngine(api_key=key)
-    logger.info("ComplianceEngine initialized successfully.")
+    model_name = os.getenv("LLM_MODEL_NAME", "gemini-2.5-flash")
+    _engine_instance = ComplianceEngine(api_key=key, model_name=model_name)
+    logger.info(f"ComplianceEngine initialized successfully with model: {model_name}")
     return _engine_instance
 
 
