@@ -50,6 +50,29 @@ class HealthResponse(BaseModel):
     timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
+class TraceabilityLog(BaseModel):
+    """
+    Standardized explicability log (XAI) for regulatory audits.
+    Provides proof of data origin and integrity.
+    """
+    cryptographic_hashes: Dict[str, str] = Field(..., description="Proof of integrity for all cited nodes")
+    validation_query: str = Field(..., description="The deterministic Cypher query used for verification")
+    execution_time_ms: float = Field(0.0, description="Processing time for the validation layer")
+    anonymization_signature: Optional[str] = Field(None, description="Placeholder for Sprint 5 PII protection signature")
+
+
+class ComplianceResponse(BaseModel):
+    """
+    Final output for the ReguMap-AI Human-in-the-loop dashboard.
+    Combines probabilistic reasoning (AI) with deterministic proof (Traceability).
+    """
+    answer: str = Field(..., description="The certifiable compliance analysis")
+    cited_references: List[str] = Field(default_factory=list)
+    traceability_log: TraceabilityLog
+    is_valid: bool = True
+    iterations: int = 1
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Compliance Audit
 # ──────────────────────────────────────────────────────────────────────────────

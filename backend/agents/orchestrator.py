@@ -1,8 +1,12 @@
-from typing import List, Dict, Optional, TypedDict
-from api_pkg.schemas import ValidationTrace
+from __future__ import annotations
+from typing import List, Dict, Optional, TypedDict, TYPE_CHECKING
+from api_pkg.schemas import ValidationTrace, TraceabilityLog
 from agents.symbolic_validator import SymbolicValidator
-from engine import ComplianceEngine
 import logging
+import time
+
+if TYPE_CHECKING:
+    from engine import ComplianceEngine
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +19,7 @@ class ComplianceState(TypedDict):
     draft_response: str
     cited_references: List[str]
     validation_trace: Optional[ValidationTrace]
+    traceability_log: Optional[TraceabilityLog]
     iteration_count: int
     error_log: List[str]
 
@@ -31,16 +36,23 @@ class ComplianceOrchestrator:
     def __init__(self, engine: ComplianceEngine, validator: SymbolicValidator):
         self.engine = engine
         self.validator = validator
+        # Standardized query template for XAI transparency
+        self.cypher_template = """
+        MATCH (n) WHERE n.id IN $node_ids 
+        RETURN n.id, n.content_hash
+        """
 
     def run(self, query: str) -> ComplianceState:
         """
         Executes the full agentic loop for a given query.
         """
+        start_time = time.time()
         state: ComplianceState = {
             "user_query": query,
             "draft_response": "",
             "cited_references": [],
             "validation_trace": None,
+            "traceability_log": None,
             "iteration_count": 0,
             "error_log": []
         }
@@ -52,10 +64,19 @@ class ComplianceOrchestrator:
             # 1. Research & Draft
             state = self.node_researcher(state)
             
-            # 2. Validate citations
+            # 2. Validate citations (with timing for XAI)
+            v_start = time.time()
             state = self.node_validator(state)
+            v_duration = (time.time() - v_start) * 1000 # ms
             
-            # 3. Route
+            # 3. Build Traceability Log for the current state
+            state["traceability_log"] = TraceabilityLog(
+                cryptographic_hashes=state["validation_trace"].cryptographic_hashes if state["validation_trace"] else {},
+                validation_query=self.cypher_template,
+                execution_time_ms=round(v_duration, 2)
+            )
+            
+            # 4. Route
             next_step = self.route_validation(state)
             
             if next_step == "END":

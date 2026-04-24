@@ -41,6 +41,15 @@ def get_engine() -> ComplianceEngine:
     return _engine_instance
 
 
+def get_neo4j_driver() -> Driver:
+    """
+    FastAPI dependency: returns the active Neo4j driver for symbolic validation.
+    """
+    if _neo4j_driver is None:
+        raise ValueError("Neo4j driver not initialized.")
+    return _neo4j_driver
+
+
 def initialize_engine(api_key: Optional[str] = None) -> ComplianceEngine:
     """
     Initialize the ComplianceEngine singleton.

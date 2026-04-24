@@ -16,20 +16,62 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from api_pkg.dependencies import get_engine
 from api_pkg.schemas import (
     AuditRequest,
     AuditResultResponse,
     AuditStatusResponse,
     BatchAuditRequest,
     BatchAuditResponse,
+    ComplianceResponse,
     ErrorResponse,
+    TraceabilityLog,
 )
 from engine import ComplianceEngine
+from agents.orchestrator import ComplianceOrchestrator
+from agents.symbolic_validator import SymbolicValidator
+from api_pkg.dependencies import get_engine, get_neo4j_driver
+from neo4j import Driver
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/audit", tags=["Compliance Audit"])
+
+
+@router.post(
+    "/ask",
+    response_model=ComplianceResponse,
+    summary="Ask a certifiable regulatory question",
+    description=(
+        "Advanced Q&A endpoint using the Multi-Agent Orchestrator. "
+        "Every response is cross-checked by the Symbolic Validator against Neo4j. "
+        "Includes a full traceability_log for XAI compliance."
+    ),
+)
+async def ask_compliance(
+    query: str,
+    engine: ComplianceEngine = Depends(get_engine),
+    driver: Driver = Depends(get_neo4j_driver),
+):
+    """Certifiable Q&A via orchestrator loop."""
+    validator = SymbolicValidator(driver)
+    orchestrator = ComplianceOrchestrator(engine, validator)
+
+    try:
+        state = orchestrator.run(query)
+        
+        return ComplianceResponse(
+            answer=state["draft_response"],
+            cited_references=state["cited_references"],
+            traceability_log=state["traceability_log"],
+            is_valid=state["validation_trace"].is_valid,
+            iterations=state["iteration_count"]
+        )
+    except Exception as e:
+        logger.error(f"Orchestration failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Compliance Orchestration Error: {str(e)}"
+        )
 
 
 @router.post(
