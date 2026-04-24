@@ -15,5 +15,7 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.12'
-    - name: Run S1 Compliance Audit
+    - name: Run S1 Compliance Audit (Terminology)
       run: python backend/audit/audit_s1_compliance.py
+    - name: Run S2 Infrastructure Audit (Network)
+      run: python backend/audit/audit_s2_network.py
