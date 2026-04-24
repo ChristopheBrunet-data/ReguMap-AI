@@ -19,7 +19,31 @@ from datetime import date, datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ValidationError
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# DOM BASE CONTRACTS (Sprint 3)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class RegulatoryNode(BaseModel):
+    """
+    Unified Document Object Model (DOM) node for hierarchical data ingestion.
+    Supports EASA (Regulations/AMC/GM) and S1000D (Data Modules).
+    """
+    node_id: str = Field(..., description="Unique regulatory or technical ID (ex: 'ORO.GEN.200')")
+    title: Optional[str] = Field(None, description="Human-readable title or heading")
+    content: str = Field(..., description="Full text or data content of the node")
+    parent_id: Optional[str] = Field(None, description="ID of the parent node for hierarchical reconstruction")
+    node_type: str = Field(..., description="Type of node (Regulation, AMC, GM, DataModule, Section)")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Extensible metadata for specific parser needs")
+
+    @field_validator("node_id")
+    @classmethod
+    def validate_id_not_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("node_id cannot be empty")
+        return v
 
 
 # ──────────────────────────────────────────────────────────────────────────────

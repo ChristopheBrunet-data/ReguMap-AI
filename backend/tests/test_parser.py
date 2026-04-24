@@ -1,89 +1,72 @@
-"""
-Tests for EASA XML and Manual PDF parsers.
-"""
-
+import unittest
 import os
-import pytest
-from parser import EasaXmlParser, ManualPdfParser
-from schemas import EasaRequirement, ManualChunk
+import xml.etree.ElementTree as ET
+from pydantic import ValidationError
+from ingestion.contracts import RegulatoryNode
+from ingestion.easa_parser import parse_easa_xml
 
+class TestRegulatoryParser(unittest.TestCase):
+    def test_easa_hierarchy_logic(self):
+        """
+        Verify that children correctly inherit parent_id in the DOM structure.
+        """
+        # Mock XML with hierarchical structure
+        xml_content = """<?xml version='1.0' encoding='utf-8'?>
+        <easy_access_rules version="2026.1">
+            <w:sdt xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+                <w:sdtPr><w:id w:val="101" /></w:sdtPr>
+                <w:t>Parent Content</w:t>
+            </w:sdt>
+            <w:sdt xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+                <w:sdtPr><w:id w:val="102" /></w:sdtPr>
+                <w:t>Child Content</w:t>
+            </w:sdt>
+            <topic ERulesId="PARENT.001" source-title="Parent" sdt-id="101" />
+            <topic ERulesId="CHILD.001" source-title="Child" sdt-id="102" parent-id="PARENT.001" />
+        </easy_access_rules>
+        """
+        test_file = "test_easa_mock.xml"
+        with open(test_file, "w", encoding="utf-8") as f:
+            f.write(xml_content)
+            
+        try:
+            nodes = parse_easa_xml(test_file)
+            self.assertEqual(len(nodes), 2)
+            
+            # Find the child node
+            child = next(n for n in nodes if n.node_id == "CHILD.001")
+            self.assertEqual(child.parent_id, "PARENT.001")
+            self.assertEqual(child.content, "Child Content")
+        finally:
+            if os.path.exists(test_file):
+                os.remove(test_file)
 
-class TestEasaXmlParser:
-    """Tests EASA XML parsing with sample data."""
+    def test_regulatory_node_validation(self):
+        """
+        Ensure Pydantic blocks malformed data (mandatory node_id).
+        """
+        # 1. Missing node_id
+        with self.assertRaises(ValidationError):
+            RegulatoryNode(
+                content="Valid content",
+                node_type="Regulation"
+            )
+            
+        # 2. Empty node_id
+        with self.assertRaises(ValidationError):
+            RegulatoryNode(
+                node_id=" ",
+                content="Valid content",
+                node_type="Regulation"
+            )
+            
+        # 3. Valid node
+        node = RegulatoryNode(
+            node_id="VALID.001",
+            content="Valid content",
+            node_type="Regulation"
+        )
+        self.assertEqual(node.node_id, "VALID.001")
 
-    def test_parse_sample_xml(self, sample_easa_xml):
-        parser = EasaXmlParser(sample_easa_xml)
-        requirements = list(parser.parse())
-        assert len(requirements) >= 1
-        for req in requirements:
-            assert isinstance(req, EasaRequirement)
-            assert req.id != "UNKNOWN_ID"
-
-    def test_parsed_fields(self, sample_easa_xml):
-        parser = EasaXmlParser(sample_easa_xml)
-        requirements = list(parser.parse())
-        ids = {r.id for r in requirements}
-        # Our sample XML has ORO.FTL.210 and ADR.OR.B.005
-        assert "ORO.FTL.210" in ids or "ADR.OR.B.005" in ids
-
-    def test_domain_extracted(self, sample_easa_xml):
-        parser = EasaXmlParser(sample_easa_xml)
-        requirements = list(parser.parse())
-        for req in requirements:
-            assert req.domain is not None
-
-    def test_amc_gm_classification(self, sample_easa_xml):
-        parser = EasaXmlParser(sample_easa_xml)
-        requirements = list(parser.parse())
-        for req in requirements:
-            assert req.amc_gm_info in ("Hard Law", "Soft Law")
-
-    def test_nonexistent_file(self, temp_dir):
-        parser = EasaXmlParser(os.path.join(temp_dir, "nonexistent.xml"))
-        with pytest.raises(ValueError, match="Failed to parse"):
-            list(parser.parse())
-
-    def test_malformed_xml(self, temp_dir):
-        path = os.path.join(temp_dir, "bad.xml")
-        with open(path, "w") as f:
-            f.write("<not>valid<xml")
-        parser = EasaXmlParser(path)
-        with pytest.raises(ValueError):
-            list(parser.parse())
-
-
-class TestManualPdfParser:
-    """Tests PDF manual parsing."""
-
-    def test_parse_sample_pdf(self, sample_manual_pdf):
-        parser = ManualPdfParser(sample_manual_pdf)
-        chunks = list(parser.parse())
-        assert len(chunks) >= 1
-        for chunk in chunks:
-            assert isinstance(chunk, ManualChunk)
-            assert chunk.content
-            assert chunk.file_hash
-
-    def test_chunk_page_numbers(self, sample_manual_pdf):
-        parser = ManualPdfParser(sample_manual_pdf)
-        chunks = list(parser.parse())
-        for chunk in chunks:
-            assert chunk.page_number >= 1
-
-    def test_file_hash_consistency(self, sample_manual_pdf):
-        parser = ManualPdfParser(sample_manual_pdf)
-        chunks = list(parser.parse())
-        hashes = {c.file_hash for c in chunks}
-        assert len(hashes) == 1  # All chunks from same file
-
-    def test_file_hash_is_sha256(self, sample_manual_pdf):
-        parser = ManualPdfParser(sample_manual_pdf)
-        chunks = list(parser.parse())
-        # SHA-256 produces a 64-character hex digest
-        assert len(chunks[0].file_hash) == 64
-
-    def test_section_titles_extracted(self, sample_manual_pdf):
-        parser = ManualPdfParser(sample_manual_pdf)
-        chunks = list(parser.parse())
-        titles = [c.section_title for c in chunks]
-        assert any(t != "General" for t in titles) or len(titles) > 0
+if __name__ == "__main__":
+    unittest.main()

@@ -31,6 +31,7 @@ from ingestion.contracts import (
     S1000DDataModule,
     S1000DEffectivity,
     S1000DIdentification,
+    RegulatoryNode
 )
 from ingestion.markdown_converter import (
     _build_dmc_from_element,
@@ -463,3 +464,32 @@ class S1000DParser:
         text = re.sub(r"^-\s+", "", text, flags=re.MULTILINE)
         text = re.sub(r"\n{3,}", "\n\n", text)
         return text.strip()
+
+
+def parse_s1000d_to_dom(file_path: str) -> List[RegulatoryNode]:
+    """
+    High-level function to extract DOM-compatible RegulatoryNodes from S1000D.
+    Standardizes technical data for the Smart DMS knowledge graph.
+    """
+    parser = S1000DParser(file_path)
+    result = parser.parse()
+    
+    nodes: List[RegulatoryNode] = []
+    
+    for dm in result.data_modules:
+        # Root node for the Data Module
+        root_node = RegulatoryNode(
+            node_id=dm.identification.dmc,
+            title=f"{dm.identification.tech_name} — {dm.identification.info_name or 'Procedure'}",
+            content=dm.content_markdown,
+            node_type="DataModule",
+            metadata={
+                "model_ident": dm.identification.model_ident_code,
+                "system_code": dm.identification.system_code,
+                "info_code": dm.identification.info_code,
+                "warnings_count": len(dm.warnings)
+            }
+        )
+        nodes.append(root_node)
+        
+    return nodes
