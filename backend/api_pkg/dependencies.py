@@ -13,6 +13,8 @@ import os
 from typing import Optional
 
 from engine import ComplianceEngine
+from graph.neo4j_schema import initialize_schema
+from neo4j import GraphDatabase, Driver
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +23,7 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────────────────
 
 _engine_instance: Optional[ComplianceEngine] = None
+_neo4j_driver: Optional[Driver] = None
 
 
 def get_engine() -> ComplianceEngine:
@@ -62,15 +65,47 @@ def initialize_engine(api_key: Optional[str] = None) -> ComplianceEngine:
     model_name = os.getenv("LLM_MODEL_NAME", "gemini-2.5-flash")
     _engine_instance = ComplianceEngine(api_key=key, model_name=model_name)
     logger.info(f"ComplianceEngine initialized successfully with model: {model_name}")
+
+    # 2. Initialize Neo4j Schema
+    initialize_neo4j_schema()
+    
     return _engine_instance
+
+def initialize_neo4j_schema():
+    """Connects to Neo4j and applies constraints/indexes."""
+    global _neo4j_driver
+    uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+    user = os.getenv("NEO4J_USER", "neo4j")
+    password = os.getenv("NEO4J_PASSWORD", "password")
+    
+    try:
+        logger.info(f"Connecting to Neo4j at {uri}...")
+        _neo4j_driver = GraphDatabase.driver(uri, auth=(user, password))
+        # Verify connectivity
+        _neo4j_driver.verify_connectivity()
+        
+        # Apply schema
+        initialize_schema(_neo4j_driver)
+    except Exception as e:
+        logger.error(f"Neo4j schema initialization failed: {e}")
+        # We don't necessarily want to crash the whole engine if Neo4j is down,
+        # but for Sprint 2 it might be better to know.
+        if _neo4j_driver:
+            _neo4j_driver.close()
+            _neo4j_driver = None
 
 
 def shutdown_engine():
     """Clean up engine resources on shutdown."""
-    global _engine_instance
+    global _engine_instance, _neo4j_driver
     if _engine_instance is not None:
         logger.info("Shutting down ComplianceEngine.")
         _engine_instance = None
+    
+    if _neo4j_driver is not None:
+        logger.info("Closing Neo4j driver.")
+        _neo4j_driver.close()
+        _neo4j_driver = None
 
 
 def is_engine_ready() -> bool:

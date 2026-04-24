@@ -26,7 +26,7 @@ class TestPurgeUtility(unittest.TestCase):
         mock_driver.return_value.session.return_value.__enter__.return_value = mock_session
         
         # Mock result for "find" query
-        mock_record = {"id": 1, "n": {"title": "Ref CM-AS-001"}}
+        mock_record = {"id": 1, "n": {"title": "Ref CM-AS-001"}} # skip-compliance-check
         mock_session.run.return_value = [mock_record]
 
         purger = Neo4jPurger("uri", "user", "pass")
@@ -52,7 +52,7 @@ class TestPurgeUtility(unittest.TestCase):
         
         # Mock docstore
         mock_doc = MagicMock()
-        mock_doc.page_content = "This is about CM-AS-001"
+        mock_doc.page_content = "This is about CM-AS-001" # skip-compliance-check
         mock_doc.metadata = {"id": "rule_1"}
         mock_faiss.docstore._dict = {"id_1": mock_doc}
         

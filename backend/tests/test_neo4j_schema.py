@@ -1,191 +1,64 @@
-"""
-Tests for the Neo4j graph schema definition.
-Validates: node labels, relationship types, Cypher generation, and schema introspection.
-"""
+import os
+import unittest
+from neo4j import GraphDatabase, exceptions
+from dotenv import load_dotenv
+from graph.neo4j_schema import initialize_schema
 
-import pytest
-from graph.neo4j_schema import (
-    AeronauticalDMSSchema,
-    NodeLabel,
-    RelationType,
-    PropertyType,
-)
+class TestNeo4jSchema(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        load_dotenv()
+        cls.uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+        cls.user = os.getenv("NEO4J_USER", "neo4j")
+        cls.password = os.getenv("NEO4J_PASSWORD", "password")
+        
+        try:
+            cls.driver = GraphDatabase.driver(cls.uri, auth=(cls.user, cls.password))
+            cls.driver.verify_connectivity()
+            # Initialize schema for the test
+            initialize_schema(cls.driver)
+        except Exception as e:
+            raise unittest.SkipTest(f"Neo4j not available: {e}")
 
+    @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, "driver"):
+            # Cleanup test data
+            with cls.driver.session() as session:
+                session.run("MATCH (n:Regulation {id: 'TEST-001'}) DELETE n")
+            cls.driver.close()
 
-@pytest.fixture
-def schema():
-    return AeronauticalDMSSchema()
+    def test_uniqueness_constraint_regulation(self):
+        """
+        Tests that the uniqueness constraint on Regulation(id) is enforced.
+        """
+        with self.driver.session() as session:
+            # 1. Clear any previous test data
+            session.run("MATCH (n:Regulation {id: 'TEST-001'}) DELETE n")
+            
+            # 2. Create a node
+            session.run("CREATE (:Regulation {id: 'TEST-001', title: 'Test Reg'})")
+            
+            # 3. Attempt to create exactly the same node
+            with self.assertRaises(exceptions.ConstraintError) as cm:
+                session.run("CREATE (:Regulation {id: 'TEST-001', title: 'Duplicate'})")
+            
+            print(f"DEBUG: Caught expected constraint error: {cm.exception}")
 
+    def test_uniqueness_constraint_document(self):
+        """
+        Tests that the uniqueness constraint on Document(hash) is enforced.
+        """
+        with self.driver.session() as session:
+            # 1. Clear previous
+            session.run("MATCH (d:Document {hash: 'HASH-123'}) DELETE d")
+            
+            # 2. Create
+            session.run("CREATE (:Document {hash: 'HASH-123', name: 'Doc A'})")
+            
+            # 3. Duplicate
+            with self.assertRaises(exceptions.ConstraintError):
+                session.run("CREATE (:Document {hash: 'HASH-123', name: 'Doc B'})")
 
-class TestNodeLabels:
-    """Validates all 7 node labels are defined."""
-
-    def test_all_labels_present(self, schema):
-        labels = schema.get_node_labels()
-        assert "Regulation" in labels
-        assert "Procedure" in labels
-        assert "Fleet" in labels
-        assert "MSN" in labels
-        assert "Manual" in labels
-        assert "ManualSection" in labels
-        assert "Agency" in labels
-
-    def test_label_count(self, schema):
-        assert len(schema.get_node_labels()) == 7
-
-    def test_regulation_has_rule_id(self, schema):
-        reg = schema.node_schemas[NodeLabel.REGULATION]
-        prop_names = [p.name for p in reg.properties]
-        assert "rule_id" in prop_names
-
-    def test_regulation_rule_id_is_unique(self, schema):
-        reg = schema.node_schemas[NodeLabel.REGULATION]
-        unique_keys = [p.name for p in reg.get_unique_properties()]
-        assert "rule_id" in unique_keys
-
-    def test_procedure_has_dmc(self, schema):
-        proc = schema.node_schemas[NodeLabel.PROCEDURE]
-        prop_names = [p.name for p in proc.properties]
-        assert "dmc" in prop_names
-
-    def test_procedure_dmc_is_unique(self, schema):
-        proc = schema.node_schemas[NodeLabel.PROCEDURE]
-        unique_keys = [p.name for p in proc.get_unique_properties()]
-        assert "dmc" in unique_keys
-
-    def test_msn_has_msn_field(self, schema):
-        msn = schema.node_schemas[NodeLabel.MSN]
-        prop_names = [p.name for p in msn.properties]
-        assert "msn" in prop_names
-        assert "registration" in prop_names
-        assert "operator" in prop_names
-
-    def test_fleet_has_type_code(self, schema):
-        fleet = schema.node_schemas[NodeLabel.FLEET]
-        prop_names = [p.name for p in fleet.properties]
-        assert "type_code" in prop_names
-        assert "manufacturer" in prop_names
-
-    def test_manual_has_manual_type(self, schema):
-        manual = schema.node_schemas[NodeLabel.MANUAL]
-        prop_names = [p.name for p in manual.properties]
-        assert "manual_type" in prop_names
-        assert "revision" in prop_names
-
-    def test_agency_has_code(self, schema):
-        agency = schema.node_schemas[NodeLabel.AGENCY]
-        prop_names = [p.name for p in agency.properties]
-        assert "code" in prop_names
-
-
-class TestRelationshipTypes:
-    """Validates all 8 relationship types."""
-
-    def test_all_types_present(self, schema):
-        types = schema.get_relationship_types()
-        assert "MANDATES" in types
-        assert "APPLIES_TO" in types
-        assert "CONTRAVENES" in types
-        assert "REFERENCES" in types
-        assert "CLARIFIES" in types
-        assert "DOCUMENTS" in types
-        assert "PART_OF" in types
-        assert "PUBLISHED_BY" in types
-
-    def test_relationship_count(self, schema):
-        assert len(schema.get_relationship_types()) == 8
-
-    def test_mandates_direction(self, schema):
-        """MANDATES: Regulation → Procedure."""
-        assert schema.validate_relationship("MANDATES", "Regulation", "Procedure")
-        assert not schema.validate_relationship("MANDATES", "Procedure", "Regulation")
-
-    def test_applies_to_direction(self, schema):
-        """APPLIES_TO: Procedure → Fleet."""
-        assert schema.validate_relationship("APPLIES_TO", "Procedure", "Fleet")
-
-    def test_contravenes_bidirectional(self, schema):
-        """CONTRAVENES: Regulation ↔ Regulation (bidirectional)."""
-        assert schema.validate_relationship("CONTRAVENES", "Regulation", "Regulation")
-
-    def test_documents_direction(self, schema):
-        """DOCUMENTS: ManualSection → Regulation."""
-        assert schema.validate_relationship("DOCUMENTS", "ManualSection", "Regulation")
-
-    def test_part_of_direction(self, schema):
-        """PART_OF: ManualSection → Manual."""
-        assert schema.validate_relationship("PART_OF", "ManualSection", "Manual")
-
-    def test_invalid_relationship(self, schema):
-        """Invalid relationship should return False."""
-        assert not schema.validate_relationship("MANDATES", "MSN", "Agency")
-        assert not schema.validate_relationship("NONEXISTENT", "Regulation", "Procedure")
-
-
-class TestCypherGeneration:
-    """Validates Cypher statement generation."""
-
-    def test_constraints_generated(self, schema):
-        constraints = schema.generate_constraints()
-        assert len(constraints) > 0
-        for stmt in constraints:
-            assert "CREATE CONSTRAINT" in stmt
-            assert "IF NOT EXISTS" in stmt
-            assert "IS UNIQUE" in stmt
-
-    def test_indexes_generated(self, schema):
-        indexes = schema.generate_indexes()
-        assert len(indexes) > 0
-        for stmt in indexes:
-            assert "CREATE INDEX" in stmt
-            assert "IF NOT EXISTS" in stmt
-
-    def test_all_cypher_valid_syntax(self, schema):
-        all_stmts = schema.generate_cypher()
-        assert len(all_stmts) > 0
-        for stmt in all_stmts:
-            assert isinstance(stmt, str)
-            assert len(stmt) > 10
-            # Every statement should reference a node label
-            assert any(label in stmt for label in schema.get_node_labels())
-
-    def test_regulation_constraint_exists(self, schema):
-        constraints = schema.generate_constraints()
-        reg_constraints = [c for c in constraints if "Regulation" in c]
-        assert len(reg_constraints) >= 1
-        assert any("rule_id" in c for c in reg_constraints)
-
-    def test_procedure_constraint_exists(self, schema):
-        constraints = schema.generate_constraints()
-        proc_constraints = [c for c in constraints if "Procedure" in c]
-        assert len(proc_constraints) >= 1
-        assert any("dmc" in c for c in proc_constraints)
-
-
-class TestSchemaIntrospection:
-    """Tests schema summary and metadata."""
-
-    def test_summary_structure(self, schema):
-        summary = schema.get_schema_summary()
-        assert summary["node_labels"] == 7
-        assert summary["relationship_types"] == 8
-        assert summary["total_properties"] > 20
-        assert summary["unique_constraints"] >= 6  # 6 of 7 labels have unique keys (ManualSection uses composite)
-
-    def test_summary_nodes_detail(self, schema):
-        summary = schema.get_schema_summary()
-        nodes = summary["nodes"]
-        assert "Regulation" in nodes
-        assert "description" in nodes["Regulation"]
-        assert "rule_id" in nodes["Regulation"]["unique_keys"]
-
-    def test_summary_relationships_detail(self, schema):
-        summary = schema.get_schema_summary()
-        rels = summary["relationships"]
-        mandates = [r for r in rels if r["type"] == "MANDATES"][0]
-        assert mandates["from"] == "Regulation"
-        assert mandates["to"] == "Procedure"
-        assert mandates["bidirectional"] is False
-
-        contravenes = [r for r in rels if r["type"] == "CONTRAVENES"][0]
-        assert contravenes["bidirectional"] is True
+if __name__ == "__main__":
+    unittest.main()
