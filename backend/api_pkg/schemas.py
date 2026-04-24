@@ -15,6 +15,22 @@ from pydantic import BaseModel, Field
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# AGENTS & VALIDATION (Sprint 4)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class ValidationTrace(BaseModel):
+    """
+    Cryptographic proof of validation for LLM-generated citations.
+    Ensures that every reference cited by the AI exists and is unaltered.
+    """
+    is_valid: bool = Field(..., description="True if all claimed references are verified in the graph")
+    verified_nodes: List[str] = Field(default_factory=list, description="List of node IDs successfully found")
+    missing_nodes: List[str] = Field(default_factory=list, description="List of IDs hallucinated by the LLM")
+    cryptographic_hashes: Dict[str, str] = Field(default_factory=dict, description="Mapping of node ID to its SHA-256 hash")
+    error_message: Optional[str] = Field(None, description="Detailed reason for validation failure")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Health & Metadata
 # ──────────────────────────────────────────────────────────────────────────────
 
