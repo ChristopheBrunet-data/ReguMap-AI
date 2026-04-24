@@ -23,3 +23,5 @@ jobs:
       run: python backend/audit/audit_s3_pipeline.py
     - name: Run S4 Explainability Audit (XAI)
       run: python backend/audit/audit_s4_explainability.py
+    - name: Run S5 Cybersecurity Audit (DLP/WAF)
+      run: python backend/audit/audit_s5_cybersecurity.py
