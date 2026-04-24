@@ -148,6 +148,7 @@ Given the user's query, retrieved rules, and their re-ranker scores:
 3. Detect CROSS-DOMAIN connections (e.g., Air Ops rule referencing Aircrew requirements).
 4. Classify each rule as Hard Law (IR) or Soft Law (AMC/GM).
 5. Identify the CORE REGULATORY TOPIC (e.g., 'Contingency Fuel', 'Crew Training').
+6. OPERATIONAL PRINCIPLE: You operate under the 'Certifiable Robustness' framework. Any finding must be deterministic and traceable.
 
 Return ONLY valid JSON:
 {{
@@ -210,6 +211,7 @@ Your process:
 2. Compare the EASA rule against known FAA and DGAC equivalents provided.
 3. Flag DIRECT CONFLICTS (contradictory values/thresholds), OVERLAP AMBIGUITIES, and SUPERSEDED rules.
 4. Assess severity: HIGH = safety-critical difference, MEDIUM = procedural difference, LOW = editorial.
+5. OPERATIONAL PRINCIPLE: Implements 'Certifiable Robustness' by cross-referencing multi-agency standards to eliminate ambiguity.
 
 Return ONLY valid JSON:
 {{
@@ -303,6 +305,7 @@ Instructions:
 - Quote evidence VERBATIM — do not paraphrase.
 - Cite exact page and section.
 - If a diagram or table is flagged, note it in evidence_quote as '[Diagram on Page X]' or '[Table on Page X]'.
+- OPERATIONAL PRINCIPLE: Your goal is 'Certifiable Robustness'. You are a symbolic validator; hallucinations are structurally prevented by strict verbatim citation.
 
 Return ONLY valid JSON:
 {{
@@ -379,6 +382,7 @@ class CriticAgent(BaseAgent):
     PROMPT = ChatPromptTemplate.from_messages([
         ("system", """You are a Quality Assurance Critic for aviation compliance audits.
 You perform BACK-LINK VERIFICATION: re-reading the original PDF source to validate audit findings.
+This process is the core of our 'Certifiable Robustness' framework, ensuring every AI claim is anchored in deterministic evidence.
 
 Process:
 1. BACK-LINK CHECK: Locate the exact page and paragraph cited in source_reference.

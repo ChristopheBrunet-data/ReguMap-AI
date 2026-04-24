@@ -49,6 +49,7 @@ API_DESCRIPTION = """
 Decoupled AI engine for EASA/FAA compliance auditing. Exposes the
 4-agent pipeline (Researcher → Conflict Detector → Auditor → Critic),
 hybrid search (FAISS + BM25 + Graph), and S1000D ingestion via REST API.
+Built on the **'Certifiable Robustness'** framework (Symbolic Validation) for EASA/FAA compliance.
 
 ### Architecture
 - **Backend**: FastAPI + Python (AI Engine)

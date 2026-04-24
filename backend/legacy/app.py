@@ -21,7 +21,7 @@ os.makedirs(HISTORY_DIR, exist_ok=True)
 
 st.set_page_config(page_title="ReguMap AI — Agentic GraphRAG", layout="wide", page_icon="✈️")
 st.title("✈️ ReguMap AI — Dashboard")
-st.caption("Central Hub | Multi-Agent Orchestration | System Status")
+st.caption("Central Hub | Multi-Agent Orchestration | Certifiable Robustness Framework")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # SESSION & AUTH
