@@ -21,3 +21,5 @@ jobs:
       run: python backend/audit/audit_s2_network.py
     - name: Run S3 Data Pipeline Audit (Ingestion)
       run: python backend/audit/audit_s3_pipeline.py
+    - name: Run S4 Explainability Audit (XAI)
+      run: python backend/audit/audit_s4_explainability.py
