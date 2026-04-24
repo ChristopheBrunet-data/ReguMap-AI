@@ -1,6 +1,6 @@
 {
     "status": "VALIDATED",
-    "timestamp": "2026-04-24T19:10:34.276834",
+    "timestamp": "2026-04-24T19:10:54.846341",
     "scope": "Sprint 3 \u2014 Data Pipeline & DOM Integrity",
     "nodes_processed": 3,
     "golden_check": {
@@ -8,5 +8,5 @@
         "status": "MATCH"
     },
     "audit_script_hash": "5c8bf4dea39523133144b0a9beec35e5b6459729ef155f71df835c37e583ffb7",
-    "audit_signature": "f74df43046b9af4aa3dbd9fd882d521c22f0b9359026878216ebef24c686cfbd"
+    "audit_signature": "d40e6a764d69b1c5feda4bdbd2dad7a9f79aeae0d47a86c16ab363e9a67b4d2a"
 }
