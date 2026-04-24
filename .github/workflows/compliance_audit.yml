@@ -19,3 +19,5 @@ jobs:
       run: python backend/audit/audit_s1_compliance.py
     - name: Run S2 Infrastructure Audit (Network)
       run: python backend/audit/audit_s2_network.py
+    - name: Run S3 Data Pipeline Audit (Ingestion)
+      run: python backend/audit/audit_s3_pipeline.py

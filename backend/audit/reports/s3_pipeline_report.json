@@ -1,0 +1,12 @@
+{
+    "status": "VALIDATED",
+    "timestamp": "2026-04-24T18:46:58.273066",
+    "scope": "Sprint 3 \u2014 Data Pipeline & DOM Integrity",
+    "nodes_processed": 3,
+    "golden_check": {
+        "node_id": "ORO.FTL.210",
+        "status": "MATCH"
+    },
+    "audit_script_hash": "5c8bf4dea39523133144b0a9beec35e5b6459729ef155f71df835c37e583ffb7",
+    "audit_signature": "bc2b69b377f90dcbe6080663e524bfec5f4e4c181c7e04c1fbeab880d5bf98bc"
+}
