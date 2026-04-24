@@ -1,6 +1,6 @@
 {
     "status": "VALIDATED",
-    "timestamp": "2026-04-24T18:39:14.568947",
+    "timestamp": "2026-04-24T18:39:19.037887",
     "scope": "Sprint 2 \u2014 Infrastructure & Network Isolation",
     "audited_file": "docker-compose.yml",
     "audited_file_hash": "a872272ad5520cf14c39aa370ccdc020f8d239e3c72cf60a27ec93fc6ec8eadc",
@@ -9,5 +9,5 @@
         "Neo4j Isolation (No port mapping)",
         "Single Gateway Entry Point (Port 3000)"
     ],
-    "audit_signature": "b71e245c51ba3d664a96435578a51ccf0dce0ec0a6ec072dc4bd447ecc7e2f3e"
+    "audit_signature": "37616bde29c49a799bc5f9caa68569149c151b9458fc09d76ed71d73a2d48dc9"
 }

@@ -23,6 +23,8 @@ from typing import Generator, List, Optional, Tuple
 
 from lxml import etree
 
+from ingestion.hasher import generate_node_hash
+
 from ingestion.contracts import (
     DocumentSource,
     EvidenceCoordinate,
@@ -477,11 +479,16 @@ def parse_s1000d_to_dom(file_path: str) -> List[RegulatoryNode]:
     nodes: List[RegulatoryNode] = []
     
     for dm in result.data_modules:
+        node_id = dm.identification.dmc
+        content = dm.content_markdown
+        node_hash = generate_node_hash(node_id, content)
+        
         # Root node for the Data Module
         root_node = RegulatoryNode(
-            node_id=dm.identification.dmc,
+            node_id=node_id,
             title=f"{dm.identification.tech_name} — {dm.identification.info_name or 'Procedure'}",
-            content=dm.content_markdown,
+            content=content,
+            content_hash=node_hash,
             node_type="DataModule",
             metadata={
                 "model_ident": dm.identification.model_ident_code,

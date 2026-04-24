@@ -49,6 +49,7 @@ class TestRegulatoryParser(unittest.TestCase):
         with self.assertRaises(ValidationError):
             RegulatoryNode(
                 content="Valid content",
+                content_hash="hash123",
                 node_type="Regulation"
             )
             
@@ -57,6 +58,7 @@ class TestRegulatoryParser(unittest.TestCase):
             RegulatoryNode(
                 node_id=" ",
                 content="Valid content",
+                content_hash="hash123",
                 node_type="Regulation"
             )
             
@@ -64,6 +66,7 @@ class TestRegulatoryParser(unittest.TestCase):
         node = RegulatoryNode(
             node_id="VALID.001",
             content="Valid content",
+            content_hash="hash123",
             node_type="Regulation"
         )
         self.assertEqual(node.node_id, "VALID.001")

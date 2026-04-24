@@ -34,6 +34,7 @@ class RegulatoryNode(BaseModel):
     node_id: str = Field(..., description="Unique regulatory or technical ID (ex: 'ORO.GEN.200')")
     title: Optional[str] = Field(None, description="Human-readable title or heading")
     content: str = Field(..., description="Full text or data content of the node")
+    content_hash: str = Field(..., description="SHA-256 cryptographic fingerprint of the node content")
     parent_id: Optional[str] = Field(None, description="ID of the parent node for hierarchical reconstruction")
     node_type: str = Field(..., description="Type of node (Regulation, AMC, GM, DataModule, Section)")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Extensible metadata for specific parser needs")

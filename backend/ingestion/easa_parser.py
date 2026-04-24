@@ -1,6 +1,7 @@
 import xml.etree.ElementTree as ET
 from typing import List, Optional, Dict
 from ingestion.contracts import RegulatoryNode
+from ingestion.hasher import generate_node_hash
 
 def parse_easa_xml(file_path: str) -> List[RegulatoryNode]:
     """
@@ -34,6 +35,10 @@ def parse_easa_xml(file_path: str) -> List[RegulatoryNode]:
         parent_id = topic.get('parent-id')
         
         content = content_map.get(sdt_id, "")
+        node_id = erules_id or f"UNKNOWN_{sdt_id}"
+        
+        # Calculate hash for traceability
+        node_hash = generate_node_hash(node_id, content)
         
         # Determine node type (Regulation by default for topics)
         node_type = "Regulation"
@@ -42,9 +47,10 @@ def parse_easa_xml(file_path: str) -> List[RegulatoryNode]:
                 node_type = "AMC/GM"
             
         node = RegulatoryNode(
-            node_id=erules_id or f"UNKNOWN_{sdt_id}",
+            node_id=node_id,
             title=title,
             content=content,
+            content_hash=node_hash,
             parent_id=parent_id,
             node_type=node_type,
             metadata={
