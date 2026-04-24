@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import List, Dict, Optional, TypedDict, TYPE_CHECKING
 from api_pkg.schemas import ValidationTrace, TraceabilityLog
 from agents.symbolic_validator import SymbolicValidator
+from security.presidio_engine import DataSanitizer
 import logging
 import time
 
@@ -16,6 +17,8 @@ class ComplianceState(TypedDict):
     Tracks the reasoning loop and validation results.
     """
     user_query: str
+    sanitized_query: str
+    anonymization_signature: str
     draft_response: str
     cited_references: List[str]
     validation_trace: Optional[ValidationTrace]
@@ -36,6 +39,7 @@ class ComplianceOrchestrator:
     def __init__(self, engine: ComplianceEngine, validator: SymbolicValidator):
         self.engine = engine
         self.validator = validator
+        self.sanitizer = DataSanitizer()
         # Standardized query template for XAI transparency
         self.cypher_template = """
         MATCH (n) WHERE n.id IN $node_ids 
@@ -47,8 +51,14 @@ class ComplianceOrchestrator:
         Executes the full agentic loop for a given query.
         """
         start_time = time.time()
+        
+        # 0. Sanitize Query (PII Protection)
+        clean_query, anonym_sig = self.sanitizer.sanitize_prompt(query)
+        
         state: ComplianceState = {
             "user_query": query,
+            "sanitized_query": clean_query,
+            "anonymization_signature": anonym_sig,
             "draft_response": "",
             "cited_references": [],
             "validation_trace": None,
@@ -73,7 +83,8 @@ class ComplianceOrchestrator:
             state["traceability_log"] = TraceabilityLog(
                 cryptographic_hashes=state["validation_trace"].cryptographic_hashes if state["validation_trace"] else {},
                 validation_query=self.cypher_template,
-                execution_time_ms=round(v_duration, 2)
+                execution_time_ms=round(v_duration, 2),
+                anonymization_signature=state["anonymization_signature"]
             )
             
             # 4. Route
@@ -104,7 +115,7 @@ class ComplianceOrchestrator:
         # We'll use a simplified version for now, assuming the engine handles the prompt
         # but we might need to extract the IDs from the response.
         
-        prompt_with_history = state["user_query"]
+        prompt_with_history = state["sanitized_query"]
         if state["error_log"]:
             # Feed back the validation errors to the LLM
             history = "\n".join([f"- {err}" for err in state["error_log"]])

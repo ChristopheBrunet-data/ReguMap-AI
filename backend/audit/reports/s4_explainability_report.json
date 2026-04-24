@@ -1,9 +1,9 @@
 {
     "status": "VALIDATED",
-    "timestamp": "2026-04-24T19:03:17.118701",
+    "timestamp": "2026-04-24T19:10:48.953548",
     "scope": "Sprint 4 \u2014 Hybrid Intelligence & XAI",
     "certification_standard": "NPA 2025-07 (Explainability)",
-    "test_payload_seal": "0445d19dc0ace2c4a150d2f7a32364aab81c497fb42055862b5b7c7c30b0ad0a",
+    "test_payload_seal": "9ccd190856583264c31a31bdfc55c7cd58e972a465bc884ac9b87c3e43c1fac0",
     "metrics": {
         "is_valid": true,
         "iterations": 1
