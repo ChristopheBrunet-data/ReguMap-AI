@@ -1,0 +1,71 @@
+# AeroMind Compliance - Cloud Run Service Configuration
+# Backend Python (Isolated in VPC)
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: aeromind-backend
+  labels:
+    cloudrun.googleapis.com/launch-stage: BETA
+spec:
+  template:
+    metadata:
+      annotations:
+        # Connecteur VPC pour accès à Neo4j (Private IP)
+        run.googleapis.com/vpc-access-connector: projects/regumap-ai-493622/locations/europe-west1/connectors/aeromind-vpc-connector
+        # Forcer tout le trafic sortant via le VPC
+        run.googleapis.com/vpc-access-egress: all-traffic
+        # Restriction Ingress : Interne uniquement (appelé par la Gateway)
+        run.googleapis.com/ingress: internal
+    spec:
+      containers:
+      - image: europe-west1-docker.pkg.dev/regumap-ai-493622/aeromind-repo/aeromind-backend:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: NEO4J_URI
+          value: "bolt://10.164.0.2:7687" # IP Privée de l'instance Compute Engine
+        - name: NEO4J_USER
+          value: "neo4j"
+        - name: NEO4J_PASSWORD
+          value: "password"
+        - name: LLM_MODEL_NAME
+          value: "gemini-2.5-flash"
+        resources:
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+---
+# Gateway Node.js (Edge Boundary)
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: aeromind-gateway
+spec:
+  template:
+    metadata:
+      annotations:
+        # Restriction Ingress : Seul le Load Balancer peut accéder au service
+        run.googleapis.com/ingress: internal-and-cloud-load-balancing
+      containers:
+      - image: europe-west1-docker.pkg.dev/regumap-ai-493622/aeromind-repo/aeromind-gateway:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: BACKEND_URL
+          value: "https://aeromind-backend-internal-hash.a.run.app"
+---
+# Frontend Nginx
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: aeromind-frontend
+spec:
+  template:
+    metadata:
+      annotations:
+        # Restriction Ingress : Seul le Load Balancer peut accéder au service
+        run.googleapis.com/ingress: internal-and-cloud-load-balancing
+      containers:
+      - image: europe-west1-docker.pkg.dev/regumap-ai-493622/aeromind-repo/aeromind-frontend:latest
+        ports:
+        - containerPort: 80

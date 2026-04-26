@@ -1,11 +1,11 @@
 {
     "status": "VALIDATED",
-    "timestamp": "2026-04-24T19:21:08.020429",
+    "timestamp": "2026-04-26T12:56:10.176085",
     "scope": "Sprint 1 \u2014 Decoupling & Terminology",
     "checks": [
         "Anti-Probabilistic Vocabulary (Zero Hallucination)",
         "Obsolescence Check (CM-AS-001)"
     ],
     "system_hash": "N/A",
-    "audit_signature": "e4a6cb888752b7a48f614cee0aec492b76d5cff2cdde5f7a182cc7ef61e5d329"
+    "audit_signature": "5543803f38852a66fd8ce59b1c35bbbabf77d4ace7dded0e1b90609289100abc"
 }

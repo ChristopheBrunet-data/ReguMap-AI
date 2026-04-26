@@ -53,6 +53,18 @@ services:
     depends_on:
       - python-backend
 
+  # 4. Interactive Dashboard / Frontend (Public Facing)
+  frontend:
+    build:
+      context: ./frontend
+    container_name: aeromind-frontend
+    networks:
+      - aeromind-vpc
+    ports:
+      - "80:80"
+    depends_on:
+      - node-gateway
+
 networks:
   aeromind-vpc:
     driver: bridge

@@ -12,6 +12,7 @@ from datetime import datetime
 DOCKER_COMPOSE_PATH = "docker-compose.yml"
 ALLOWED_EXPOSED_SERVICES = {
     "node-gateway": ["3000:3000"],
+    "frontend": ["80:80"],
 }
 FORBIDDEN_SERVICES_WITH_PORTS = ["python-backend", "neo4j"]
 
@@ -50,13 +51,14 @@ def run_network_audit():
             if ports:
                 violations.append(f"Service '{service_name}' violates isolation policy: found ports mapping {ports}")
         
-        # Rule 2: Only node-gateway can expose 3000
-        if service_name == "node-gateway":
+        # Rule 2: Only authorized services can expose specific ports
+        if service_name in ALLOWED_EXPOSED_SERVICES:
+            allowed_ports = ALLOWED_EXPOSED_SERVICES[service_name]
             for p in ports:
-                # Ports can be "3000:3000" (string) or a dict in some compose versions
                 p_str = str(p)
-                if "3000" not in p_str:
-                    violations.append(f"Gateway service '{service_name}' has unexpected port mapping: {p_str}")
+                # Flexible check: at least one of the allowed strings must be in the port config
+                if not any(ap in p_str for ap in allowed_ports):
+                    violations.append(f"Authorized service '{service_name}' has unexpected port mapping: {p_str} (Allowed: {allowed_ports})")
         elif service_name not in FORBIDDEN_SERVICES_WITH_PORTS:
             # Other services (if any)
             if ports:
