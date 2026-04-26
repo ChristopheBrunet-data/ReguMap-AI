@@ -67,7 +67,7 @@ def run_explainability_audit():
             final_state = orchestrator.run(f"User Question {i}")
             
             # 2. Extract Traceability Log (simulating API response serialization)
-            t_log: TraceabilityLog = final_state.get("traceability_log")
+            t_log: TraceabilityLog = final_state.traceability_log
             
             # 3. Validation Logic
             if not t_log:
@@ -98,13 +98,13 @@ def run_explainability_audit():
 def _mock_researcher(state, request_index):
     """Dynamically mocks the LLM researcher for the audit."""
     if request_index % 2 == 0:
-        state["researcher_response"] = "The rule is Part-IS.AR.10."
+        state.researcher_response = "The rule is Part-IS.AR.10."
     else:
         # Simulate a hallucination that auto-corrects on iteration 2
-        if state["iteration_count"] == 1:
-            state["researcher_response"] = "The rule is HALLUCINATION.123."
+        if state.iteration_count == 1:
+            state.researcher_response = "The rule is HALLUCINATION.123."
         else:
-            state["researcher_response"] = "Correction: The rule is ADR.OR.B.005."
+            state.researcher_response = "Correction: The rule is ADR.OR.B.005."
     return state
 
 

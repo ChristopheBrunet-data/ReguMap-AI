@@ -1,6 +1,6 @@
 {
     "status": "VALIDATED",
-    "timestamp": "2026-04-26T15:10:40.121942",
+    "timestamp": "2026-04-26T15:39:45.795708",
     "scope": "Sprint 5 \u2014 Cybersecurity & Guardrails",
     "metrics": {
         "waf_blocking_rate": "100%",
@@ -12,5 +12,5 @@
         ]
     },
     "audit_evidence": "Dynamic simulation of 10+ injection vectors and PII leak scenarios.",
-    "audit_signature": "d6e27c8672cc8341adb459fa1a4ea65be6833806be64848daba34562a045de10"
+    "audit_signature": "49e6818625a22aa9be8b04aa37bf63a708d188a8dfa493e40972e3291a5278a8"
 }
