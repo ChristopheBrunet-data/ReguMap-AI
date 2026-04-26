@@ -5,21 +5,21 @@ from api_pkg.schemas import ValidationTrace
 
 class TestSymbolicValidator(unittest.TestCase):
     def setUp(self):
-        # Mocking the Neo4j Driver and its verify_nodes_exist behavior
+        # Mocking the Neo4j Driver and session
         self.mock_driver = MagicMock()
+        self.mock_session = self.mock_driver.session.return_value.__enter__.return_value
         self.validator = SymbolicValidator(self.mock_driver)
 
     def test_valid_reference_check(self):
         """
         Scenario: LLM cites an existing node.
         """
-        # Mocking the query engine result (injected via patching or just mock the dependency)
-        # For simplicity, we patch the verify_nodes_exist call
-        import agents.symbolic_validator as sv
-        sv.verify_nodes_exist = MagicMock(return_value={"ORO.FTL.210": "hash_abc_123"})
+        # Mocking Neo4j records
+        mock_record = {"node_id": "ORO.FTL.210", "node_hash": "hash_abc_123"}
+        self.mock_session.run.return_value = [mock_record]
         
-        claimed = ["ORO.FTL.210"]
-        trace = self.validator.validate_references(claimed)
+        assertion = "Based on ORO.FTL.210, you are compliant."
+        trace = self.validator.validate_assertion(assertion)
         
         self.assertTrue(trace.is_valid)
         self.assertIn("ORO.FTL.210", trace.verified_nodes)
@@ -29,16 +29,25 @@ class TestSymbolicValidator(unittest.TestCase):
         """
         Scenario: LLM cites a non-existent node (hallucination).
         """
-        import agents.symbolic_validator as sv
-        sv.verify_nodes_exist = MagicMock(return_value={}) # Nothing found
+        self.mock_session.run.return_value = [] # Nothing found
         
-        claimed = ["ORO.FTL.999"]
-        trace = self.validator.validate_references(claimed)
+        assertion = "Based on ORO.FTL.999, you are compliant."
+        trace = self.validator.validate_assertion(assertion)
         
         self.assertFalse(trace.is_valid)
         self.assertIn("ORO.FTL.999", trace.missing_nodes)
         self.assertIsNotNone(trace.error_message)
-        self.assertIn("Hallucination Detected", trace.error_message)
+        self.assertIn("ERR_DATA_NOT_FOUND", trace.error_message)
+
+    def test_no_evidence_rejection(self):
+        """
+        Scenario: Assertion contains no regulatory IDs.
+        """
+        assertion = "You are compliant."
+        trace = self.validator.validate_assertion(assertion)
+        
+        self.assertFalse(trace.is_valid)
+        self.assertIn("ERR_NO_EVIDENCE", trace.error_message)
 
 if __name__ == "__main__":
     unittest.main()

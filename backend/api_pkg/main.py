@@ -25,6 +25,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from api_pkg.dependencies import initialize_engine, is_engine_ready, shutdown_engine
 from api_pkg.routes import compliance, graph, ingestion, search
 from api_pkg.schemas import HealthResponse, HealthStatus
+from security.vault import verify_session_token
+from fastapi import Security, Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 # Load environment variables
 load_dotenv()
@@ -146,15 +149,37 @@ app.add_middleware(
 )
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Security Dependency (Zero-Trust)
+# ──────────────────────────────────────────────────────────────────────────────
+
+auth_scheme = HTTPBearer()
+
+def validate_user(token: HTTPAuthorizationCredentials = Depends(auth_scheme)):
+    """
+    Verifies the JWT token from the Gateway.
+    Implements Zero-Trust: Backend does not trust the VPC alone.
+    """
+    payload = verify_session_token(token.credentials)
+    if not payload:
+        logger.warning(f"UNAUTHORIZED ACCESS ATTEMPT: Invalid or expired token.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired Certification Token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return payload
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Route Registration
 # ──────────────────────────────────────────────────────────────────────────────
 
 API_PREFIX = "/api/v1"
 
-app.include_router(compliance.router, prefix=API_PREFIX)
-app.include_router(search.router, prefix=API_PREFIX)
-app.include_router(graph.router, prefix=API_PREFIX)
-app.include_router(ingestion.router, prefix=API_PREFIX)
+# Apply Zero-Trust validation to all functional routers
+app.include_router(compliance.router, prefix=API_PREFIX, dependencies=[Depends(validate_user)])
+app.include_router(search.router, prefix=API_PREFIX, dependencies=[Depends(validate_user)])
+app.include_router(graph.router, prefix=API_PREFIX, dependencies=[Depends(validate_user)])
+app.include_router(ingestion.router, prefix=API_PREFIX, dependencies=[Depends(validate_user)])
 
 
 # ──────────────────────────────────────────────────────────────────────────────

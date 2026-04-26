@@ -22,7 +22,11 @@ app.use((req, res, next) => {
 app.use(promptInjectionWAF);
 
 // 3. JWT Verification Middleware (RBAC proxy bridge)
-const JWT_SECRET = process.env.JWT_SECRET || 'aero-secure-key-2026';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('[CRITICAL] JWT_SECRET is not set. Gateway shutting down.');
+  process.exit(1);
+}
 
 app.use((req, res, next) => {
   const authHeader = req.headers['authorization'];

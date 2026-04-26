@@ -19,7 +19,8 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from api_pkg.dependencies import get_engine
 from api_pkg.schemas import ErrorResponse, IngestionStatusResponse
 from engine import ComplianceEngine
-from parser import EasaXmlParser, ManualPdfParser
+from ingestion.easa_parser import parse_easa_xml
+from ingestion.manual_parser import ManualPdfParser
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +65,7 @@ async def ingest_easa_xml(
 
     try:
         logger.info(f"Ingesting EASA XML: {file.filename} ({len(content)} bytes)")
-        parser = EasaXmlParser(tmp_path)
-        rules = list(parser.parse())
+        rules = parse_easa_xml(tmp_path)
 
         if not rules:
             raise HTTPException(

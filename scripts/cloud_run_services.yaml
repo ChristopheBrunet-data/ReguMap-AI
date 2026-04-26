@@ -23,11 +23,19 @@ spec:
         - containerPort: 8000
         env:
         - name: NEO4J_URI
-          value: "bolt://10.164.0.2:7687" # IP Privée de l'instance Compute Engine
+          value: "bolt://10.164.0.2:7687" # Private VPC IP
         - name: NEO4J_USER
           value: "neo4j"
         - name: NEO4J_PASSWORD
-          value: "password"
+          valueFrom:
+            secretKeyRef:
+              name: aeromind-neo4j-password
+              key: latest
+        - name: GEMINI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: aeromind-gemini-key
+              key: latest
         - name: LLM_MODEL_NAME
           value: "gemini-2.5-flash"
         resources:
@@ -53,6 +61,11 @@ spec:
         env:
         - name: BACKEND_URL
           value: "https://aeromind-backend-internal-hash.a.run.app"
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: aeromind-jwt-secret
+              key: latest
 ---
 # Frontend Nginx
 apiVersion: serving.knative.dev/v1

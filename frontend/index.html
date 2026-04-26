@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AeroMind Compliance - Cockpit</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0c10;
+            --surface: #161b22;
+            --border: #30363d;
+            --accent: #58a6ff;
+            --success: #238636;
+            --warning: #d29922;
+            --error: #f85149;
+            --text: #c9d1d9;
+            --text-dim: #8b949e;
+        }
+
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        header {
+            padding: 1rem 2rem;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo { font-weight: 600; font-size: 1.2rem; letter-spacing: 1px; color: var(--accent); }
+        .status { font-size: 0.8rem; color: var(--success); display: flex; align-items: center; gap: 0.5rem; }
+        .status::before { content: ''; width: 8px; height: 8px; background: var(--success); border-radius: 50%; }
+
+        main {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* 80% Chat Area */
+        #chat-pane {
+            flex: 4;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--border);
+            padding: 2rem;
+            overflow-y: auto;
+        }
+
+        /* 20% Audit Pane */
+        #audit-pane {
+            flex: 1;
+            background: var(--bg);
+            padding: 1.5rem;
+            overflow-y: auto;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 0.8rem;
+        }
+
+        .message {
+            margin-bottom: 2rem;
+            max-width: 800px;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .role { font-weight: 600; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.5rem; color: var(--accent); }
+        .content { line-height: 1.6; }
+
+        .search-container {
+            margin-top: auto;
+            padding-top: 2rem;
+            display: flex;
+            gap: 1rem;
+        }
+
+        input {
+            flex: 1;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 1rem;
+            color: white;
+            border-radius: 8px;
+            outline: none;
+            font-size: 1rem;
+        }
+
+        input:focus { border-color: var(--accent); }
+
+        button {
+            background: var(--accent);
+            color: black;
+            border: none;
+            padding: 0 2rem;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        button:hover { opacity: 0.9; }
+        button:disabled { background: var(--border); cursor: not-allowed; }
+
+        .audit-section { margin-bottom: 2rem; }
+        .audit-title { color: var(--text-dim); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 1rem; font-size: 0.7rem; }
+        .audit-item { margin-bottom: 0.5rem; color: var(--text); }
+        .audit-value { color: var(--accent); word-break: break-all; }
+        .audit-label { color: var(--text-dim); }
+
+        .tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            margin-right: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="logo">AEROMIND COMPLIANCE</div>
+    <div class="status">System Secure (DO-326A)</div>
+</header>
+
+<main>
+    <section id="chat-pane">
+        <div id="messages">
+            <div class="message">
+                <div class="role">System</div>
+                <div class="content">Welcome to the AeroMind Compliance Audit Cockpit. Enter a regulatory query to begin.</div>
+            </div>
+        </div>
+
+        <div class="search-container">
+            <input type="text" id="query-input" placeholder="Enter EASA requirement or manual section..." autocomplete="off">
+            <button id="send-btn">RUN AUDIT</button>
+        </div>
+    </section>
+
+    <section id="audit-pane">
+        <div class="audit-section">
+            <div class="audit-title">CERTIFICATION TRACEABILITY (XAI)</div>
+            <div id="audit-content">
+                <div class="audit-item"><span class="audit-label">Session:</span> <span class="audit-value">IDLE</span></div>
+                <div class="audit-item"><span class="audit-label">Validation:</span> <span class="audit-value">WAITING</span></div>
+            </div>
+        </div>
+    </section>
+</main>
+
+<script src="api.js"></script>
+<script>
+    const messagesDiv = document.getElementById('messages');
+    const input = document.getElementById('query-input');
+    const btn = document.getElementById('send-btn');
+    const auditDiv = document.getElementById('audit-content');
+
+    function appendMessage(role, text) {
+        const msg = document.createElement('div');
+        msg.className = 'message';
+        msg.innerHTML = `<div class="role">${role}</div><div class="content">${text}</div>`;
+        messagesDiv.appendChild(msg);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    function updateAudit(trace, log) {
+        if (!trace || !log) return;
+        
+        auditDiv.innerHTML = `
+            <div class="audit-item"><span class="audit-label">Doc Hash:</span> <span class="audit-value">${log.source_hash.substring(0, 16)}...</span></div>
+            <div class="audit-item"><span class="audit-label">Iteration:</span> <span class="audit-value">${log.iteration_count}</span></div>
+            <div class="audit-item"><span class="audit-label">Citations:</span> <span class="audit-value">${trace.verified_nodes.join(', ') || 'None'}</span></div>
+            <div class="audit-item"><span class="audit-label">Security:</span> <span class="audit-value">${log.anonymized ? 'PII-Sanitized' : 'Direct'}</span></div>
+            <div class="audit-item"><span class="audit-label">Deterministic:</span> <span class="audit-value">${trace.is_valid ? 'Verified' : 'Failed'}</span></div>
+        `;
+    }
+
+    async function handleQuery() {
+        const query = input.value.trim();
+        if (!query) return;
+
+        input.value = '';
+        btn.disabled = true;
+        appendMessage('User', query);
+
+        try {
+            const result = await queryCompliance(query);
+            if (result) {
+                appendMessage('AeroMind AI', result.draft_response);
+                updateAudit(result.validation_trace, result.traceability_log);
+            }
+        } catch (err) {
+            appendMessage('Error', `Audit failed: ${err.message}`);
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    btn.addEventListener('click', handleQuery);
+    input.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleQuery(); });
+
+    // Mock JWT for local dev if missing (just for UI preview)
+    if (!sessionStorage.getItem('jwt_token')) {
+        sessionStorage.setItem('jwt_token', 'mock-token-for-dev');
+    }
+</script>
+
+</body>
+</html>

@@ -1,27 +1,45 @@
-name: Compliance Audit
+name: AeroMind Compliance Audit (DevSecOps Gate)
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, develop ]
 
 jobs:
-  audit:
+  security-and-quality-gate:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0 # Required for secret scanning history
+
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.12'
-    - name: Run S1 Compliance Audit (Terminology)
-      run: python backend/audit/audit_s1_compliance.py
-    - name: Run S2 Infrastructure Audit (Network)
-      run: python backend/audit/audit_s2_network.py
-    - name: Run S3 Data Pipeline Audit (Ingestion)
-      run: python backend/audit/audit_s3_pipeline.py
-    - name: Run S4 Explainability Audit (XAI)
-      run: python backend/audit/audit_s4_explainability.py
-    - name: Run S5 Cybersecurity Audit (DLP/WAF)
-      run: python backend/audit/audit_s5_cybersecurity.py
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r backend/requirements.txt
+        pip install pytest bandit gitleaks
+
+    - name: "🔐 Step 1: Secret Scanning (Gitleaks)"
+      run: gitleaks detect --source . --verbose --redact
+
+    - name: "🛡️ Step 2: SAST Security Analysis (Bandit)"
+      run: bandit -r backend/ -ll # High and Medium severity only
+
+    - name: "🧪 Step 3: Mandatory Unit Tests (Pytest)"
+      run: |
+        export JWT_SECRET="ci-test-key"
+        pytest backend/tests/
+
+    - name: "📜 Step 4: Regulatory Compliance Scripts"
+      run: |
+        python backend/audit/audit_s1_compliance.py
+        python backend/audit/audit_s2_network.py
+        python backend/audit/audit_s3_pipeline.py
+        python backend/audit/audit_s4_explainability.py
+        python backend/audit/audit_s5_cybersecurity.py

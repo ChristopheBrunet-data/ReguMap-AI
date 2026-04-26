@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import List, Dict, Optional, TypedDict, TYPE_CHECKING
+from typing import List, Dict, Optional, TYPE_CHECKING
 import sys
 import os
 
@@ -13,20 +13,22 @@ import time
 
 logger = logging.getLogger(__name__)
 
-class ComplianceState(TypedDict):
+from pydantic import BaseModel, Field
+
+class ComplianceState(BaseModel):
     """
-    Immuable state for the Multi-Agent Compliance Orchestrator.
+    Immutable state for the Multi-Agent Compliance Orchestrator.
     Tracks the reasoning loop and validation results.
     """
     user_query: str
     sanitized_query: str
-    researcher_response: str
-    draft_response: str
-    cited_references: List[str]
-    validation_trace: Optional[ValidationTrace]
-    traceability_log: Optional[TraceabilityLog]
-    iteration_count: int
-    error_log: List[str]
+    researcher_response: str = ""
+    draft_response: str = ""
+    cited_references: List[str] = Field(default_factory=list)
+    validation_trace: Optional[ValidationTrace] = None
+    traceability_log: Optional[TraceabilityLog] = None
+    iteration_count: int = 0
+    error_log: List[str] = Field(default_factory=list)
 
 class ComplianceTimeoutError(Exception):
     """Raised when the agent loop fails to converge on a valid response."""
@@ -49,21 +51,14 @@ class ComplianceOrchestrator:
         # 0. Sanitize Query (PII Protection - Sprint 5)
         clean_query, _ = self.sanitizer.sanitize_prompt(query)
         
-        state: ComplianceState = {
-            "user_query": query,
-            "sanitized_query": clean_query,
-            "researcher_response": "",
-            "draft_response": "",
-            "cited_references": [],
-            "validation_trace": None,
-            "traceability_log": None,
-            "iteration_count": 0,
-            "error_log": []
-        }
+        state = ComplianceState(
+            user_query=query,
+            sanitized_query=clean_query
+        )
         
-        while state["iteration_count"] < 3:
-            state["iteration_count"] += 1
-            logger.info(f"--- Iteration {state['iteration_count']} ---")
+        while state.iteration_count < 3:
+            state.iteration_count += 1
+            logger.info(f"--- Iteration {state.iteration_count} ---")
             
             # 1. Researcher Phase (Mocked LLM generation for now)
             # Use sanitized_query instead of raw user_query
@@ -78,11 +73,11 @@ class ComplianceOrchestrator:
             v_duration = (time.time() - v_start) * 1000 # ms
             
             # 4. Build Traceability Log
-            if state["validation_trace"]:
-                state["traceability_log"] = TraceabilityLog(
-                    cypher_query_executed=state["validation_trace"].cypher_query_executed or "NO_QUERY",
-                    node_hashes=state["validation_trace"].cryptographic_hashes,
-                    validation_status=state["validation_trace"].is_valid,
+            if state.validation_trace:
+                state.traceability_log = TraceabilityLog(
+                    cypher_query_executed=state.validation_trace.cypher_query_executed or "NO_QUERY",
+                    node_hashes=state.validation_trace.cryptographic_hashes,
+                    validation_status=state.validation_trace.is_valid,
                     anonymized=True, # Explicitly true per Sprint 5 requirements
                     execution_time_ms=round(v_duration, 2)
                 )
@@ -94,13 +89,13 @@ class ComplianceOrchestrator:
                 logger.info("Validation Successful. Ending loop.")
                 return state
             
-            logger.warning(f"Validation failed. Retrying... Errors: {state['validation_trace'].error_message}")
-            state["error_log"].append(state["validation_trace"].error_message)
+            logger.warning(f"Validation failed. Retrying... Errors: {state.validation_trace.error_message}")
+            state.error_log.append(state.validation_trace.error_message)
 
         # If we reach here, we hit the iteration limit
         raise ComplianceTimeoutError(
-            f"Failed to produce a certifiable response after {state['iteration_count']} attempts. "
-            f"Last validation error: {state['validation_trace'].error_message if state['validation_trace'] else 'Unknown'}"
+            f"Failed to produce a certifiable response after {state.iteration_count} attempts. "
+            f"Last validation error: {state.validation_trace.error_message if state.validation_trace else 'Unknown'}"
         )
 
     def node_researcher(self, state: ComplianceState) -> ComplianceState:
@@ -109,10 +104,10 @@ class ComplianceOrchestrator:
         Task: Query the hybrid engine and extract context.
         """
         # MOCK IMPLEMENTATION of LLM - Using sanitized_query
-        if state["error_log"]:
-            state["researcher_response"] = "The correct requirement is Part-IS.AR.10"
+        if state.error_log:
+            state.researcher_response = "The correct requirement is Part-IS.AR.10"
         else:
-            state["researcher_response"] = f"Analyzing context for: {state['sanitized_query']}. References: ADR.OR.B.005, HALLUCINATED.RULE"
+            state.researcher_response = f"Analyzing context for: {state.sanitized_query}. References: ADR.OR.B.005, HALLUCINATED.RULE"
             
         return state
 
@@ -121,7 +116,7 @@ class ComplianceOrchestrator:
         Agent: Auditor
         Task: Draft the final response using only researcher data.
         """
-        state["draft_response"] = f"Based on the analysis: {state['researcher_response']}."
+        state.draft_response = f"Based on the analysis: {state.researcher_response}."
         return state
 
     def node_validator(self, state: ComplianceState) -> ComplianceState:
@@ -129,14 +124,14 @@ class ComplianceOrchestrator:
         Agent: Validator (Deterministic)
         Task: Verify all drafted text against the Neo4j graph using Symbolic Validator.
         """
-        trace = self.validator.validate_assertion(state["draft_response"])
-        state["validation_trace"] = trace
+        trace = self.validator.validate_assertion(state.draft_response)
+        state.validation_trace = trace
         return state
 
     def route_validation(self, state: ComplianceState) -> str:
         """
         Decision Edge: Determines if the response is ready or needs correction.
         """
-        if state["validation_trace"] and state["validation_trace"].is_valid:
+        if state.validation_trace and state.validation_trace.is_valid:
             return "END"
         return "RESEARCHER"

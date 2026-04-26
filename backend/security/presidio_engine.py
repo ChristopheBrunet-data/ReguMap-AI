@@ -23,6 +23,17 @@ class DataSanitizer:
         phone_recognizer = PatternRecognizer(supported_entity="PHONE_NUMBER", patterns=[phone_pattern])
         self.analyzer.registry.add_recognizer(phone_recognizer)
 
+        # Aviation-specific PII (Sprint 5)
+        # Tail Number (Registration): e.g., F-GZCP, N12345
+        tail_pattern = Pattern(name="tail_number_pattern", regex=r'\b[A-Z]{1,2}-[A-Z0-9]{1,5}\b|\bN[0-9]{1,5}[A-Z]{0,2}\b', score=0.7)
+        tail_recognizer = PatternRecognizer(supported_entity="TAIL_NUMBER", patterns=[tail_pattern])
+        self.analyzer.registry.add_recognizer(tail_recognizer)
+
+        # MSN (Manufacturer Serial Number): e.g., MSN 1234, S/N 45678
+        msn_pattern = Pattern(name="msn_pattern", regex=r'\b(MSN|S/N|Serial Number)\s*[0-9]{3,5}\b', score=0.7)
+        msn_recognizer = PatternRecognizer(supported_entity="MSN", patterns=[msn_pattern])
+        self.analyzer.registry.add_recognizer(msn_recognizer)
+
         # Mandatory PII targets for EASA/DO-326A compliance
         self.anonymizer = AnonymizerEngine()
         self.operators = {
@@ -31,6 +42,8 @@ class DataSanitizer:
             "PHONE_NUMBER": OperatorConfig("replace", {"new_value": "<PHONE_NUMBER>"}),
             "LOCATION": OperatorConfig("replace", {"new_value": "<LOCATION>"}),
             "IP_ADDRESS": OperatorConfig("replace", {"new_value": "<IP>"}),
+            "TAIL_NUMBER": OperatorConfig("replace", {"new_value": "<TAIL_NUMBER>"}),
+            "MSN": OperatorConfig("replace", {"new_value": "<MSN>"}),
             "UK_NHS": OperatorConfig("replace", {"new_value": "<PHONE_NUMBER>"}), # Handle common misidentification
         }
 

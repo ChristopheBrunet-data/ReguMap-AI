@@ -22,31 +22,41 @@ class TestSecurityAnonymization(unittest.TestCase):
         self.assertIn("PERSON", signature)
         self.assertIn("PHONE_NUMBER", signature)
 
+    def test_aviation_pii_deidentification(self):
+        """
+        Verify that aviation-specific identifiers (MSN, Tail Numbers) are masked.
+        """
+        input_text = "Aircraft N12345 (MSN 9876) has a defect."
+        clean_text, signature = self.sanitizer.sanitize_prompt(input_text)
+        
+        self.assertNotIn("N12345", clean_text)
+        self.assertNotIn("9876", clean_text)
+        self.assertIn("<TAIL_NUMBER>", clean_text)
+        self.assertIn("<MSN>", clean_text)
+        self.assertIn("TAIL_NUMBER", signature)
+        self.assertIn("MSN", signature)
+
     def test_orchestrator_integration(self):
         """
-        Verify that the orchestrator uses the sanitized query for LLM calls.
+        Verify that the orchestrator uses the sanitized query for reasoning.
         """
-        mock_engine = MagicMock()
         mock_validator = MagicMock()
-        mock_engine.answer_regulatory_question.return_value = "Response from AI."
-        
         # Mocking validator success
-        mock_validator.validate_references.return_value = ValidationTrace(
+        mock_validator.validate_assertion.return_value = ValidationTrace(
             is_valid=True,
-            verified_nodes=[],
-            cryptographic_hashes={}
+            verified_nodes=["ADR.OR.B.005"],
+            cryptographic_hashes={"ADR.OR.B.005": "hash"}
         )
         
-        orchestrator = ComplianceOrchestrator(mock_engine, mock_validator)
+        orchestrator = ComplianceOrchestrator(mock_validator)
         
         sensitive_query = "Contact John Doe for ADR.OR.B.005."
-        orchestrator.run(sensitive_query)
+        state = orchestrator.run(sensitive_query)
         
-        # Check that the engine received the sanitized version
-        # It should contain <PERSON> instead of John Doe
-        call_args = mock_engine.answer_regulatory_question.call_args[0][0]
-        self.assertNotIn("John Doe", call_args)
-        self.assertIn("<PERSON>", call_args)
+        # Check that the researcher response used the sanitized query
+        self.assertNotIn("John Doe", state.researcher_response)
+        self.assertIn("<PERSON>", state.researcher_response)
+        self.assertTrue(state.traceability_log.anonymized)
 
 if __name__ == "__main__":
     unittest.main()
