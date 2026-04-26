@@ -1,13 +1,18 @@
 import hashlib
+import re
 
 def generate_node_hash(node_id: str, content: str) -> str:
     """
     Generates a deterministic SHA-256 hash for a regulatory node.
     Combining node_id and content ensures that any change in text 
     or classification results in a new hash.
+    Purges superfluous whitespaces to ensure deterministic output.
     """
-    # Normalize input: strip whitespace to avoid hash divergence due to formatting
-    payload = f"{node_id.strip()}|{content.strip()}"
+    # Normalize input: collapse all whitespace characters into a single space
+    normalized_content = re.sub(r'\s+', ' ', content).strip()
+    normalized_id = node_id.strip()
+    
+    payload = f"{normalized_id}|{normalized_content}"
     
     return hashlib.sha256(payload.encode('utf-8')).hexdigest()
 

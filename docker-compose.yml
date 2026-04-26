@@ -6,7 +6,7 @@ services:
     image: neo4j:5.15
     container_name: aeromind-neo4j
     networks:
-      - aeromind-vpc
+      - private_ai_net
     environment:
       - NEO4J_AUTH=neo4j/password
       - NEO4J_PLUGINS=["apoc"]
@@ -26,7 +26,7 @@ services:
       context: ./backend
     container_name: aeromind-python-backend
     networks:
-      - aeromind-vpc
+      - private_ai_net
     expose:
       - "8000"
     env_file:
@@ -45,7 +45,8 @@ services:
       context: ./gateway
     container_name: aeromind-node-gateway
     networks:
-      - aeromind-vpc
+      - public_net
+      - private_ai_net
     ports:
       - "3000:3000"
     environment:
@@ -59,12 +60,14 @@ services:
       context: ./frontend
     container_name: aeromind-frontend
     networks:
-      - aeromind-vpc
+      - public_net
     ports:
       - "80:80"
     depends_on:
       - node-gateway
 
 networks:
-  aeromind-vpc:
+  public_net:
     driver: bridge
+  private_ai_net:
+    internal: true

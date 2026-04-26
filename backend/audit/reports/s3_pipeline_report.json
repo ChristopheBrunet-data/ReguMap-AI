@@ -1,12 +1,11 @@
 {
     "status": "VALIDATED",
-    "timestamp": "2026-04-26T12:56:11.920754",
-    "scope": "Sprint 3 \u2014 Data Pipeline & DOM Integrity",
-    "nodes_processed": 3,
-    "golden_check": {
-        "node_id": "ORO.FTL.210",
-        "status": "MATCH"
-    },
-    "audit_script_hash": "5c8bf4dea39523133144b0a9beec35e5b6459729ef155f71df835c37e583ffb7",
-    "audit_signature": "e3ad3be209d8fc4fc5255f632b8a38e81a43797e14d50b00f44070cae0711264"
+    "timestamp": "2026-04-26T13:43:40.032794",
+    "scope": "Sprint 3 \u2014 W-Model Data Pipeline",
+    "checks": [
+        "Pydantic Strict Instantiation",
+        "Whitespace Normalization Hash",
+        "Cryptographic Integrity Exception (HashMismatchError)"
+    ],
+    "audit_signature": "709342810a784b483dbe6ab072e2789da8c1fcfadbdc2ffcdcc15e3dfa90b3dd"
 }

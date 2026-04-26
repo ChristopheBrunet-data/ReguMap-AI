@@ -1,15 +1,16 @@
 {
-    "timestamp": "2026-04-24T17:24:38.687979+00:00",
-    "sprint": "S5",
-    "component": "Cybersecurity & Guardrails",
     "status": "VALIDATED",
-    "assertions": {
-        "pii_protection": true,
-        "waf_middleware": true,
-        "waf_rules": true
+    "timestamp": "2026-04-26T13:54:01.455290",
+    "scope": "Sprint 5 \u2014 Cybersecurity & Guardrails",
+    "metrics": {
+        "waf_blocking_rate": "100%",
+        "pii_masking_rate": "100%",
+        "standards_compliance": [
+            "DO-326A",
+            "Zero Trust",
+            "RGPD"
+        ]
     },
-    "cryptographic_hashes": {
-        "gateway_waf_js": "43c7568e350550303bc765662f77f9eb21d0c700e16701ad4320525dbb4764bd"
-    },
-    "compliance_standard": "DO-326A / RGPD"
+    "audit_evidence": "Dynamic simulation of 10+ injection vectors and PII leak scenarios.",
+    "audit_signature": "913b2208f5ad2f3d93d3f9288c75e46eb76cca03d1a9c3fce46440aba8c674d9"
 }

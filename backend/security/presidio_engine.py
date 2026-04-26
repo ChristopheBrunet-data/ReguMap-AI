@@ -14,25 +14,24 @@ class DataSanitizer:
     
     def __init__(self):
         # We use Spacy en_core_web_lg for high-accuracy local extraction
+        # This configuration is strict: no external API calls for NLP
         self.analyzer = AnalyzerEngine(default_score_threshold=0.35)
         
         # Add custom recognizer for phone numbers (often missed by default NLP)
-        # Supports 3-3-4, 3-4, and international formats
-        phone_pattern = Pattern(name="phone_number_pattern", regex=r'\b(\d{3}[-.\s]??\d{3,4}[-.\s]??\d{4}|\d{3}[-.\s]??\d{4})\b', score=0.5)
+        from presidio_analyzer import PatternRecognizer, Pattern
+        phone_pattern = Pattern(name="phone_number_pattern", regex=r'\b(\d{3}[-.\s]??\d{3,4}[-.\s]??\d{4}|\d{3}[-.\s]??\d{4})\b', score=0.6)
         phone_recognizer = PatternRecognizer(supported_entity="PHONE_NUMBER", patterns=[phone_pattern])
         self.analyzer.registry.add_recognizer(phone_recognizer)
 
+        # Mandatory PII targets for EASA/DO-326A compliance
         self.anonymizer = AnonymizerEngine()
-        
-        # We can define specific anonymization strategies if needed
         self.operators = {
             "PERSON": OperatorConfig("replace", {"new_value": "<PERSON>"}),
-            "PHONE_NUMBER": OperatorConfig("replace", {"new_value": "<PHONE_NUMBER>"}),
             "EMAIL_ADDRESS": OperatorConfig("replace", {"new_value": "<EMAIL>"}),
+            "PHONE_NUMBER": OperatorConfig("replace", {"new_value": "<PHONE_NUMBER>"}),
             "LOCATION": OperatorConfig("replace", {"new_value": "<LOCATION>"}),
-            "CRYPTO": OperatorConfig("replace", {"new_value": "<CRYPTO>"}),
-            "IBAN_CODE": OperatorConfig("replace", {"new_value": "<IBAN>"}),
             "IP_ADDRESS": OperatorConfig("replace", {"new_value": "<IP>"}),
+            "UK_NHS": OperatorConfig("replace", {"new_value": "<PHONE_NUMBER>"}), # Handle common misidentification
         }
 
     def sanitize_prompt(self, text: str) -> Tuple[str, str]:

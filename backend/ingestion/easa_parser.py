@@ -1,73 +1,99 @@
-import xml.etree.ElementTree as ET
-from typing import List, Optional, Dict
-from ingestion.contracts import RegulatoryNode
+from lxml import etree
+from typing import List, Dict
+import sys
+import os
+
+# Ensure the backend root is in the path to allow absolute imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from schemas import RegulationNode
 from ingestion.hasher import generate_node_hash
 
-def parse_easa_xml(file_path: str) -> List[RegulatoryNode]:
+def parse_easa_xml(file_path: str) -> List[RegulationNode]:
     """
-    Parses EASA Easy Access Rules XML into a hierarchical DOM structure.
-    Standardizes nodes into RegulatoryNode objects for downstream ingestion.
+    Parses EASA Easy Access Rules XML into a hierarchical DOM structure using lxml.
+    Instantiates strictly typed RegulationNode objects for downstream ingestion.
     """
-    tree = ET.parse(file_path)
+    try:
+        tree = etree.parse(file_path)
+    except Exception as e:
+        print(f"[!] Failed to parse XML with lxml: {e}")
+        return []
+        
     root = tree.getroot()
     
     # 1. Map content by SDT ID
-    # Note: Dealing with namespaces (w:sdt, w:t)
+    # The EASA XML often uses WordProcessingML namespaces for text blocks
     namespaces = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
     content_map: Dict[str, str] = {}
     
-    for sdt in root.findall('.//w:sdt', namespaces):
-        sdt_id_elem = sdt.find('.//w:id', namespaces)
-        text_elem = sdt.find('.//w:t', namespaces)
+    # Extract text from w:sdt tags (Structured Document Tags)
+    for sdt in root.xpath('.//w:sdt', namespaces=namespaces):
+        sdt_id_elem = sdt.find('.//w:id', namespaces=namespaces)
+        text_elem = sdt.find('.//w:t', namespaces=namespaces)
         
-        if sdt_id_elem is not None and text_elem is not None:
+        if sdt_id_elem is not None and text_elem is not None and text_elem.text:
             sdt_id = sdt_id_elem.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val')
-            content_map[sdt_id] = text_elem.text
+            content_map[sdt_id] = text_elem.text.strip()
 
-    # 2. Build RegulatoryNodes from topics
-    nodes: List[RegulatoryNode] = []
+    # Fallback/Direct parsing: if XML uses <er:topic> or direct <topic> tags
+    # Let's search for any element ending in 'topic'
+    nodes: List[RegulationNode] = []
+    topics = root.xpath('//*[local-name()="topic"]')
     
-    for topic in root.findall('topic'):
+    for topic in topics:
         erules_id = topic.get('ERulesId')
         sdt_id = topic.get('sdt-id')
-        title = topic.get('source-title')
-        domain = topic.get('Domain')
-        parent_id = topic.get('parent-id')
         
-        content = content_map.get(sdt_id, "")
-        node_id = erules_id or f"UNKNOWN_{sdt_id}"
-        
-        # Calculate hash for traceability
-        node_hash = generate_node_hash(node_id, content)
-        
-        # Determine node type (Regulation by default for topics)
-        node_type = "Regulation"
-        if erules_id:
-            if "AMC" in erules_id or "GM" in erules_id:
-                node_type = "AMC/GM"
+        # Determine content: use content_map if sdt-id exists, otherwise extract raw text from children
+        if sdt_id and sdt_id in content_map:
+            content = content_map[sdt_id]
+        else:
+            # Extract all text inside the topic tag
+            content = "".join(topic.itertext()).strip()
             
-        node = RegulatoryNode(
-            node_id=node_id,
-            title=title,
-            content=content,
-            content_hash=node_hash,
-            parent_id=parent_id,
-            node_type=node_type,
-            metadata={
-                "domain": domain,
-                "sdt_id": sdt_id
-            }
-        )
-        nodes.append(node)
+        if not content:
+            content = "No textual content available."
+
+        # EASA regulations must have a node_id
+        node_id = erules_id or f"UNKNOWN_{sdt_id or id(topic)}"
         
+        # Determine legal category
+        category = "Regulation" # Default
+        if erules_id:
+            if "AMC" in erules_id:
+                category = "AMC"
+            elif "GM" in erules_id:
+                category = "GM"
+            elif "CS" in erules_id:
+                category = "CS"
+            elif "IR" in erules_id:
+                category = "IR"
+                
+        # Generate the cryptographic hash
+        sha256_hash = generate_node_hash(node_id, content)
+        
+        try:
+            node = RegulationNode(
+                node_id=node_id,
+                content=content,
+                category=category,
+                sha256_hash=sha256_hash
+            )
+            nodes.append(node)
+        except Exception as e:
+            print(f"[!] Validation error skipping node {node_id}: {e}")
+            
     return nodes
 
 if __name__ == "__main__":
-    import os
     sample_path = os.path.join(os.path.dirname(__file__), "..", "sample_easa.xml")
     if os.path.exists(sample_path):
         results = parse_easa_xml(sample_path)
-        for res in results:
-            print(f"[{res.node_type}] {res.node_id}: {res.title}")
+        for res in results[:5]: # print first 5
+            print(f"[{res.category}] {res.node_id}")
+            print(f"Hash: {res.sha256_hash}")
             print(f"Content: {res.content[:50]}...")
             print("-" * 20)
+        print(f"Total nodes parsed: {len(results)}")
+    else:
+        print(f"Sample not found at {sample_path}")

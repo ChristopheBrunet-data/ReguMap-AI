@@ -1,5 +1,6 @@
 const express = require('express');
 const { createProxyMiddleware, fixRequestBody } = require('http-proxy-middleware');
+const jwt = require('jsonwebtoken');
 const { promptInjectionWAF } = require('./waf');
 
 const app = express();
@@ -19,6 +20,28 @@ app.use((req, res, next) => {
 
 // 2. Cognitive WAF (Prompt Injection Defense)
 app.use(promptInjectionWAF);
+
+// 3. JWT Verification Middleware (RBAC proxy bridge)
+const JWT_SECRET = process.env.JWT_SECRET || 'aero-secure-key-2026';
+
+app.use((req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    console.log('[GATEWAY] JWT Missing or Malformed - Blocking request.');
+    return res.status(401).json({ error: 'Unauthorized: Missing valid Bearer token' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded; // Store decoded token data for future use
+    console.log(`[GATEWAY] JWT Verified for user: ${decoded.sub || 'unknown'}`);
+    next();
+  } catch (err) {
+    console.log(`[GATEWAY] JWT Verification Failed: ${err.message}`);
+    return res.status(401).json({ error: 'Unauthorized: Invalid token' });
+  }
+});
 
 // Proxy all requests to the Python Backend
 app.use('/', createProxyMiddleware({

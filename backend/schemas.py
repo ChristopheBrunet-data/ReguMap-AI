@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Tuple, Any
 from enum import Enum
 
@@ -120,3 +120,21 @@ class GraphEdge(BaseModel):
     edge_type: EdgeType = Field(..., description="Type of relationship")
     weight: float = Field(1.0, description="Edge weight for graph traversal")
     properties: dict = Field(default_factory=dict, description="Additional metadata")
+
+class RegulationNode(BaseModel):
+    """
+    Modèle de donnée strict pour l'ingestion des nœuds réglementaires EASA.
+    Garantit la présence de l'ID, du contenu, de la taxonomie (category) et de l'empreinte cryptographique.
+    """
+    node_id: str = Field(..., description="Identifiant unique (ex: 'ADR.OR.B.005')")
+    content: str = Field(..., description="Texte pur de la réglementation")
+    category: str = Field(..., description="Taxonomie légale (ex: 'IR', 'AMC', 'GM', 'CS')")
+    sha256_hash: str = Field(..., description="Hash cryptographique (SHA-256) du contenu et de l'ID")
+
+    @field_validator("node_id", "content", "category")
+    @classmethod
+    def must_not_be_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("Field cannot be empty or whitespace.")
+        return v.strip()
+

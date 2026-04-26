@@ -92,6 +92,18 @@ class S1000DInfoCode(str, Enum):
     WIRING = "400"              # Wiring data
 
 
+class RegulatoryEdgeType(str, Enum):
+    """
+    Strict Legal Ontology for relationship types (T1.3).
+    Ensures high-performance graph traversal by using native Neo4j relationship labels.
+    """
+    AMENDS = "AMENDS"           # Modification of a rule
+    IMPLEMENTS = "IMPLEMENTS"   # Connection between hard law and technical procedure
+    REFERENCES = "REFERENCES"   # Simple cross-reference
+    DEFINES = "DEFINES"         # Definition of a term or concept
+    CLARIFIES = "CLARIFIES"     # AMC/GM clarifying an IR
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Evidence Coordinates (The "Evidence-First" Core)
 # ──────────────────────────────────────────────────────────────────────────────

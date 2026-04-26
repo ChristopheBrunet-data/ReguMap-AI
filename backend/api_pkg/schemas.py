@@ -28,6 +28,7 @@ class ValidationTrace(BaseModel):
     missing_nodes: List[str] = Field(default_factory=list, description="List of IDs hallucinated by the LLM")
     cryptographic_hashes: Dict[str, str] = Field(default_factory=dict, description="Mapping of node ID to its SHA-256 hash")
     error_message: Optional[str] = Field(None, description="Detailed reason for validation failure")
+    cypher_query_executed: Optional[str] = Field(None, description="The deterministic Cypher query used for verification")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -55,10 +56,11 @@ class TraceabilityLog(BaseModel):
     Standardized explicability log (XAI) for regulatory audits.
     Provides proof of data origin and integrity.
     """
-    cryptographic_hashes: Dict[str, str] = Field(..., description="Proof of integrity for all cited nodes")
-    validation_query: str = Field(..., description="The deterministic Cypher query used for verification")
+    cypher_query_executed: str = Field(..., description="The deterministic Cypher query used for verification")
+    node_hashes: Dict[str, str] = Field(..., description="Proof of integrity for all cited nodes")
+    validation_status: bool = Field(..., description="Absolute boolean validation status")
+    anonymized: bool = Field(True, description="Whether the input was sanitized via Presidio")
     execution_time_ms: float = Field(0.0, description="Processing time for the validation layer")
-    anonymization_signature: Optional[str] = Field(None, description="Placeholder for Sprint 5 PII protection signature")
 
 
 class ComplianceResponse(BaseModel):

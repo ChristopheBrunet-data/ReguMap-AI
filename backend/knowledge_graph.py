@@ -14,6 +14,8 @@ import networkx as nx
 import security
 
 from schemas import EasaRequirement, ManualChunk, GraphNode, GraphEdge
+from ingestion.contracts import RegulatoryNode
+from graph.persistence import upsert_nodes_to_neo4j, upsert_edges_to_neo4j
 from core_constants import EASA_RULE_ID_PATTERN, DOMAIN_TO_AGENCY
 
 
@@ -29,17 +31,40 @@ class RegulatoryKnowledgeGraph:
         self.persist_path = persist_path
         self.graph = nx.DiGraph()
         self._rule_index: Dict[str, EasaRequirement] = {}
+        # T1.1 - Initialisation de la Lookup Table pour la Résolution d'Entités
+        self.entity_index: Dict[str, RegulatoryNode] = {}
+    def _standardize_id(self, raw_id: str) -> str:
+        """Nettoie l'ID pour garantir une résolution d'entité parfaite (T1.1)."""
+        return raw_id.strip().upper()
+
+    def build_index(self, validated_nodes: List[RegulatoryNode]):
+        """Peuple l'index en mémoire avant toute interaction avec Neo4j (T1.1)."""
+        import logging
+        logger = logging.getLogger("regumap-ai.graph")
+        logger.info(f"Début de l'indexation en mémoire : {len(validated_nodes)} entités...")
+        
+        for node in validated_nodes:
+            clean_id = self._standardize_id(node.node_id)
+            self.entity_index[clean_id] = node
+            
+        logger.info(f"Indexation terminée : {len(self.entity_index)} entités valides prêtes.")
 
     # ──────────────────────────────────────────────────────────────────────────
     # Build from data sources
     # ──────────────────────────────────────────────────────────────────────────
 
-    def build_from_rules(self, rules: List[EasaRequirement]):
+    def build_from_rules(self, rules: List[RegulatoryNode]):
         """
-        Populates graph nodes and edges from EASA requirements.
-        Auto-detects cross-references and Hard Law / Soft Law relationships.
+        Populates graph nodes and edges from validated regulatory entities.
+        Uses in-memory index to ensure entity resolution (T1.1).
         """
-        print(f"Building knowledge graph from {len(rules)} rules...")
+        import logging
+        logger = logging.getLogger("regumap-ai.graph")
+        
+        # 1. PEUPLEMENT DE L'INDEX (T1.1 Étape 2.3)
+        self.build_index(rules)
+
+        logger.info(f"Construction du graphe à partir de {len(rules)} entités...")
 
         # Ensure Agency nodes exist
         for agency in set(DOMAIN_TO_AGENCY.values()):
@@ -47,46 +72,79 @@ class RegulatoryKnowledgeGraph:
                 self.graph.add_node(agency, node_type="Agency", label=agency, domain=None)
 
         for rule in rules:
-            self._rule_index[rule.id] = rule
-            domain = rule.domain or "unknown"
+            self._rule_index[rule.node_id] = rule # Note: legacy compatibility if needed
+            domain = rule.metadata.get("domain", "unknown")
             agency = DOMAIN_TO_AGENCY.get(domain, "EASA")
-
-            # Determine node type: Regulation or AMC_GM
-            upper_id = rule.id.upper()
-            upper_title = (rule.source_title or "").upper()
-            if "AMC" in upper_id or "GM" in upper_id or "AMC" in upper_title or "GM" in upper_title:
-                node_type = "AMC_GM"
-            else:
-                node_type = "Regulation"
 
             # Add rule node
             self.graph.add_node(
-                rule.id,
-                node_type=node_type,
-                label=rule.source_title or rule.id,
+                rule.node_id,
+                node_type=rule.node_type,
+                label=rule.title or rule.node_id,
                 domain=domain,
-                law_type=rule.amc_gm_info or "Unknown",
-                text_preview=rule.text[:200] if rule.text else "",
+                law_type=rule.metadata.get("law_type", "Unknown"),
+                text_preview=rule.content[:200] if rule.content else "",
             )
 
             # Edge: Agency → Regulation
-            self.graph.add_edge(agency, rule.id, edge_type="PUBLISHES", weight=1.0)
+            self.graph.add_edge(agency, rule.node_id, edge_type="PUBLISHES", weight=1.0)
 
+            # 2. CRÉATION DES RELATIONS AVEC BARRIÈRE DE SÉCURITÉ O(1) (T1.1 Étape 2.4)
             # Detect cross-references in rule text
-            ref_ids = set(EASA_RULE_ID_PATTERN.findall(rule.text)) - {rule.id}
+            ref_ids = set(EASA_RULE_ID_PATTERN.findall(rule.content)) - {rule.node_id}
+            
             for ref_id in ref_ids:
-                # CLARIFIES if this is AMC/GM referencing a hard law
-                if node_type == "AMC_GM":
-                    edge_type = "CLARIFIES"
+                clean_ref_id = self._standardize_id(ref_id)
+                
+                # T1.1 - LA BARRIÈRE DE SÉCURITÉ O(1)
+                target_node = self.entity_index.get(clean_ref_id)
+                
+                if target_node:
+                    # ✅ SUCCÈS : L'entité existe. On peut créer la relation.
+                    # CLARIFIES if this is AMC/GM referencing a hard law
+                    if "AMC" in rule.node_type or "GM" in rule.node_type:
+                        edge_type = "CLARIFIES"
+                    else:
+                        edge_type = "REFERENCES"
+                        
+                    self.graph.add_edge(
+                        rule.node_id, target_node.node_id,
+                        edge_type=edge_type,
+                        weight=0.9,
+                    )
                 else:
-                    edge_type = "REFERENCES"
-                self.graph.add_edge(
-                    rule.id, ref_id,
-                    edge_type=edge_type,
-                    weight=0.9,
-                )
+                    # ❌ ÉCHEC : Référence brisée (Nœud fantôme évité)
+                    logger.warning(f"Référence brisée détectée : {ref_id} cité dans {rule.node_id} est introuvable.")
 
-        print(f"Graph built: {self.graph.number_of_nodes()} nodes, {self.graph.number_of_edges()} edges.")
+        logger.info(f"Graphe construit : {self.graph.number_of_nodes()} nœuds, {self.graph.number_of_edges()} relations.")
+
+    def sync_to_neo4j(self, driver):
+        """
+        Synchronise le graphe NetworkX vers Neo4j de manière idempotente (T1.2).
+        Utilise le batching pour optimiser les performances.
+        """
+        import logging
+        logger = logging.getLogger("regumap-ai.graph-sync")
+        logger.info("Synchronisation du Gumeau Numérique vers Neo4j...")
+
+        # 1. Upsert des Nœuds
+        nodes_batch = list(self.entity_index.values())
+        upsert_nodes_to_neo4j(driver, nodes_batch)
+
+        # 2. Upsert des Relations (Edges)
+        edges_batch = []
+        for source, target, data in self.graph.edges(data=True):
+            # On ignore les relations vers les Agences pour ce batch (déjà géré ou à part)
+            if source in self.entity_index and target in self.entity_index:
+                edges_batch.append({
+                    "source_id": source,
+                    "target_id": target,
+                    "weight": data.get("weight", 1.0),
+                    "type": data.get("edge_type", "LINKED_TO")
+                })
+        
+        upsert_edges_to_neo4j(driver, edges_batch)
+        logger.info("Synchronisation Neo4j terminée avec succès. ✅")
 
     def build_from_manual(self, chunks: List[ManualChunk], rule_chunk_map: Dict[str, List[ManualChunk]]):
         """

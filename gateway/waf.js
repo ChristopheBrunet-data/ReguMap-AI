@@ -1,18 +1,22 @@
 /**
  * ReguMap-AI WAF (Web Application Firewall)
- * Heuristic Prompt Injection Detection (DO-326A Compliance)
+ * Heuristic Prompt & Cypher Injection Detection (DO-326A Compliance)
  */
 
 const INJECTION_PATTERNS = [
+    // 1. LLM Prompt Injection (Jailbreaks & Leaking)
     /(ignore|disregard)\s+(all\s+)?(previous\s+)?(instructions|directions|prompts)/i,
-    /(system\s+prompt|you\s+are\s+now|bypass|jailbreak)/i,
+    /(system\s+prompt|you\s+are\s+now|bypass|jailbreak|override)/i,
     /forget\s+(everything|your\s+instructions)/i,
-    /override\s+safety/i,
-    /as\s+an\s+ai\s+language\s+model/i // Often used in jailbreak attempts
+    /as\s+an\s+ai\s+language\s+model/i,
+    
+    // 2. Cypher Injection (Graph Integrity Protection)
+    /\b(MATCH|DELETE|DROP|MERGE|CREATE|REMOVE|DETACH|LIMIT|SKIP)\b/i,
+    /--|UNION|SELECT|INSERT|UPDATE/i // SQL-like patterns that might be tried
 ];
 
 /**
- * Heuristic scanner for prompt injection signatures.
+ * Heuristic scanner for injection signatures.
  * @param {string} text 
  * @returns {boolean}
  */
@@ -28,19 +32,20 @@ function detectInjection(text) {
 }
 
 /**
- * Express Middleware for Prompt Injection WAF.
+ * Express Middleware for ReguMap-AI WAF.
+ * This is the first line of defense before authentication.
  */
 function promptInjectionWAF(req, res, next) {
-    // We expect the query in the request body (JSON) or as a query param
-    const userInput = req.body?.query || req.query?.query || "";
+    // Scan body, query parameters and path
+    const userInput = JSON.stringify(req.body) + JSON.stringify(req.query) + req.url;
 
-    if (userInput && detectInjection(userInput)) {
-        console.warn(`[SECURITY VIOLATION] Prompt Injection Detected: "${userInput}"`);
-        console.warn(`[AUDIT] Source IP: ${req.ip} | Method: ${req.method} | URL: ${req.url}`);
+    if (detectInjection(userInput)) {
+        console.warn(`[SECURITY VIOLATION] Injection Attempt Detected: Source IP ${req.ip}`);
+        console.warn(`[AUDIT] Target URL: ${req.url} | Content: ${userInput.substring(0, 100)}...`);
         
         return res.status(403).json({
-            error: "Security Violation: Prompt Injection Detected",
-            code: "SEC-PROMPT-INJ-001",
+            error: "Security Violation: Malicious Content Detected",
+            code: "SEC-WAF-VPC-403",
             message: "Your request was blocked by the ReguMap-AI Cognitive WAF (DO-326A Compliance)."
         });
     }

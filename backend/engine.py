@@ -31,6 +31,7 @@ from tenacity import retry, wait_exponential, stop_after_attempt
 
 from schemas import EasaRequirement, ManualChunk, ComplianceAudit
 from knowledge_graph import RegulatoryKnowledgeGraph
+from ingestion.contracts import RegulatoryNode
 from agents import ComplianceBoard
 
 
@@ -199,7 +200,25 @@ Cross-Referenced Rules:
 
         # ── Knowledge Graph ──────────────────────────────────────────────
         if not self.knowledge_graph.load():
-            self.knowledge_graph.build_from_rules(rules)
+            # Convert EasaRequirement to RegulatoryNode for the Knowledge Graph (T1.1)
+            import hashlib
+            reg_nodes = []
+            for r in rules:
+                content_hash = hashlib.sha256(r.text.encode()).hexdigest()
+                node = RegulatoryNode(
+                    node_id=r.id,
+                    title=r.source_title,
+                    content=r.text,
+                    content_hash=content_hash,
+                    node_type="Regulation" if r.amc_gm_info == "Hard Law" else "AMC/GM",
+                    metadata={
+                        "domain": r.domain,
+                        "law_type": r.amc_gm_info
+                    }
+                )
+                reg_nodes.append(node)
+            
+            self.knowledge_graph.build_from_rules(reg_nodes)
             self.knowledge_graph.persist()
 
         print("All indices ready.")

@@ -1,44 +1,73 @@
+import re
 from neo4j import Driver
-from typing import List, Set
-from api_pkg.schemas import ValidationTrace
-from graph.query_engine import verify_nodes_exist
+from typing import List, Dict, Any, Tuple
+import sys
+import os
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+from backend.api_pkg.schemas import ValidationTrace
 
 class SymbolicValidator:
     """
-    Deterministic validator to prevent LLM hallucinations.
-    Ensures every regulatory citation is cross-checked against the Neo4j Graph.
+    Validateur Déterministe pour garantir la Robustesse Certifiable.
+    L'approche stochastique (LLM) est strictement bridée par la logique symbolique Neo4j.
     """
     
     def __init__(self, driver: Driver):
         self.driver = driver
+        # Regex to detect standard regulatory IDs (e.g., AMC1.ORO.GEN.200, Part-IS.AR.10)
+        self.id_pattern = re.compile(r'[A-Z0-9]+(?:\.[A-Z0-9]+)+')
 
-    def validate_references(self, claimed_ids: List[str]) -> ValidationTrace:
+    def _extract_entities(self, assertion: str) -> List[str]:
+        """Extrait les identifiants réglementaires (entités) de l'assertion du LLM."""
+        return list(set(self.id_pattern.findall(assertion)))
+
+    def validate_assertion(self, assertion: str) -> ValidationTrace:
         """
-        Cross-references claimed IDs with the Graph.
-        A response is ONLY valid if 100% of the claimed IDs exist in the database.
+        Analyse l'assertion, génère/exécute une requête Cypher stricte,
+        et retourne la preuve cryptographique.
         """
+        claimed_ids = self._extract_entities(assertion)
+        
         if not claimed_ids:
-            return ValidationTrace(is_valid=True)
+            # S'il n'y a aucune référence réglementaire, on ne peut pas garantir la traçabilité.
+            # En aéronautique, une affirmation sans source est invalide.
+            return ValidationTrace(
+                is_valid=False,
+                verified_nodes=[],
+                missing_nodes=[],
+                cryptographic_hashes={},
+                error_message="ERR_NO_EVIDENCE: L'assertion ne contient aucune référence réglementaire traçable.",
+                cypher_query_executed=None
+            )
 
-        # Deduplicate claimed IDs
-        unique_claims = list(set(claimed_ids))
+        # Génération d'une requête Cypher stricte pour vérifier l'existence
+        cypher_query = """
+        MATCH (n) WHERE n.id IN $node_ids
+        RETURN n.id AS node_id, n.sha256_hash AS node_hash
+        """
         
-        # Query Neo4j for ground truth
-        found_map = verify_nodes_exist(self.driver, unique_claims)
-        
+        found_map: Dict[str, str] = {}
+        with self.driver.session() as session:
+            records = session.run(cypher_query, node_ids=claimed_ids)
+            for record in records:
+                found_map[record["node_id"]] = record["node_hash"]
+                
         verified_ids = list(found_map.keys())
-        missing_ids = [cid for cid in unique_claims if cid not in found_map]
+        missing_ids = [cid for cid in claimed_ids if cid not in found_map]
         
+        # Vérification booléenne stricte : 100% des entités citées DOIVENT exister en base.
         is_valid = len(missing_ids) == 0
         error_msg = None
         
         if not is_valid:
-            error_msg = f"Hallucination Detected: The following references do not exist in the regulatory database: {missing_ids}"
+            error_msg = f"ERR_DATA_NOT_FOUND: Les références suivantes ont été hallucinées et n'existent pas dans la base de vérité: {missing_ids}"
             
         return ValidationTrace(
             is_valid=is_valid,
             verified_nodes=verified_ids,
             missing_nodes=missing_ids,
             cryptographic_hashes=found_map,
-            error_message=error_msg
+            error_message=error_msg,
+            cypher_query_executed=cypher_query
         )
