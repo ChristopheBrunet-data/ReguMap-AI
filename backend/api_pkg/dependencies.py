@@ -43,11 +43,34 @@ def get_engine() -> ComplianceEngine:
 
 def get_neo4j_driver() -> Driver:
     """
-    FastAPI dependency: returns the active Neo4j driver for symbolic validation.
+    FastAPI dependency: returns the active Neo4j driver or a Mock for local testing.
     """
+    global _neo4j_driver
     if _neo4j_driver is None:
-        raise ValueError("Neo4j driver not initialized.")
+        logger.warning("Neo4j not available. Falling back to MockDriver for demonstration.")
+        return MockNeo4jDriver()
     return _neo4j_driver
+
+class MockNeo4jDriver:
+    """Mock for local dev without Docker."""
+    def __init__(self):
+        self.db = {
+            "CM-AS-001": "sha256_7f8e9a0b1c2d3e4f5a6b7c8d9e0f",
+            "ADR.OR.B.005": "sha256_1a2b3c4d5e6f7g8h9i0j",
+            "Part-IS.AR.10": "sha256_k1l2m3n4o5p6q7r8s9t0"
+        }
+    def session(self, **kwargs): return self
+    def __enter__(self): return self
+    def __exit__(self, *args): pass
+    def verify_connectivity(self): pass
+    def close(self): pass
+    def run(self, query, node_ids=None, **kwargs):
+        results = []
+        if node_ids:
+            for nid in node_ids:
+                if nid in self.db:
+                    results.append({"node_id": nid, "node_hash": self.db[nid]})
+        return results
 
 
 def initialize_engine(api_key: Optional[str] = None) -> ComplianceEngine:

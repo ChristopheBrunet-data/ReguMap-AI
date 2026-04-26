@@ -5,8 +5,6 @@ These are separate from the internal domain schemas (schemas.py, ingestion/contr
 to enforce a clean API contract that can evolve independently of internal models.
 """
 
-from __future__ import annotations
-
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -70,7 +68,7 @@ class ComplianceResponse(BaseModel):
     """
     answer: str = Field(..., description="The certifiable compliance analysis")
     cited_references: List[str] = Field(default_factory=list)
-    traceability_log: TraceabilityLog
+    traceability_log: Optional[TraceabilityLog] = None
     is_valid: bool = True
     iterations: int = 1
 

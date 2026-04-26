@@ -8,8 +8,6 @@ These endpoints wrap ComplianceEngine.evaluate_compliance(), which runs
 the full 4-agent pipeline (Researcher → Conflict → Auditor → Critic).
 """
 
-from __future__ import annotations
-
 import logging
 import time
 from typing import List
@@ -25,6 +23,7 @@ from api_pkg.schemas import (
     ComplianceResponse,
     ErrorResponse,
     TraceabilityLog,
+    QARequest,
 )
 from engine import ComplianceEngine
 from agents.orchestrator import ComplianceOrchestrator
@@ -48,11 +47,12 @@ router = APIRouter(prefix="/audit", tags=["Compliance Audit"])
     ),
 )
 async def ask_compliance(
-    query: str,
+    request: QARequest,
     engine: ComplianceEngine = Depends(get_engine),
     driver: Driver = Depends(get_neo4j_driver),
 ):
     """Certifiable Q&A via orchestrator loop."""
+    query = request.question
     validator = SymbolicValidator(driver)
     orchestrator = ComplianceOrchestrator(engine, validator)
 
@@ -60,11 +60,11 @@ async def ask_compliance(
         state = orchestrator.run(query)
         
         return ComplianceResponse(
-            answer=state["draft_response"],
-            cited_references=state["cited_references"],
-            traceability_log=state["traceability_log"],
-            is_valid=state["validation_trace"].is_valid,
-            iterations=state["iteration_count"]
+            answer=state.draft_response,
+            cited_references=state.cited_references,
+            traceability_log=state.traceability_log,
+            is_valid=state.validation_trace.is_valid,
+            iterations=state.iteration_count
         )
     except Exception as e:
         logger.error(f"Orchestration failed: {e}")

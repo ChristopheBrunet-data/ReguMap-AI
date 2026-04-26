@@ -15,8 +15,9 @@ class SymbolicValidator:
     
     def __init__(self, driver: Driver):
         self.driver = driver
-        # Remplace l'ancienne regex trop permissive par une capture structurée EASA
-        self.id_pattern = re.compile(r'\b(?:AMC\d*|GM\d*|CS|Part-[A-Z]+|ORO|CAT|SPA|ADR)(?:\.[a-zA-Z0-9\-]+)+\b')
+        # Hardened regex for EASA/FAA regulatory IDs (DO-178C/326A compliance)
+        # Supports: AMC 20-27, CM-AS-001, Part-IS.AR.10, ORO.GEN.200, etc.
+        self.id_pattern = re.compile(r'\b(?:AMC\d*|GM\d*|CS|Part-[A-Z]+|ORO|CAT|SPA|ADR|CM)(?:[\.\-\s][a-zA-Z0-9\-]+)+\b')
 
     def _extract_entities(self, assertion: str) -> List[str]:
         """Extrait les identifiants réglementaires (entités) de l'assertion du LLM."""

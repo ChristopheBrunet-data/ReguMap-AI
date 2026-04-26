@@ -3,11 +3,11 @@
  * Strictly decoupled, zero business logic.
  */
 
-const GATEWAY_URL = 'http://localhost:3000';
+const GATEWAY_URL = 'http://localhost:8000';
 
 async function secureFetch(endpoint, options = {}) {
     const token = sessionStorage.getItem('jwt_token');
-    
+
     const headers = {
         'Content-Type': 'application/json',
         ...(token && { 'Authorization': `Bearer ${token}` }),
@@ -42,9 +42,9 @@ async function secureFetch(endpoint, options = {}) {
 /**
  * Perform a compliance audit query.
  */
-async function queryCompliance(query) {
-    return secureFetch('/api/v1/audit/single', {
+async function queryCompliance(question) {
+    return secureFetch('/api/v1/audit/ask', {
         method: 'POST',
-        body: JSON.stringify({ query })
+        body: JSON.stringify({ question })
     });
 }

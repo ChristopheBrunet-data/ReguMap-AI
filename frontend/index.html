@@ -181,15 +181,16 @@
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
 
-    function updateAudit(trace, log) {
-        if (!trace || !log) return;
+    function updateAudit(result) {
+        if (!result || !result.traceability_log) return;
+        const log = result.traceability_log;
         
         auditDiv.innerHTML = `
-            <div class="audit-item"><span class="audit-label">Doc Hash:</span> <span class="audit-value">${log.source_hash.substring(0, 16)}...</span></div>
-            <div class="audit-item"><span class="audit-label">Iteration:</span> <span class="audit-value">${log.iteration_count}</span></div>
-            <div class="audit-item"><span class="audit-label">Citations:</span> <span class="audit-value">${trace.verified_nodes.join(', ') || 'None'}</span></div>
+            <div class="audit-item"><span class="audit-label">Validation:</span> <span class="audit-value">${result.is_valid ? 'CERTIFIED ✅' : 'FAILED ❌'}</span></div>
+            <div class="audit-item"><span class="audit-label">Iterations:</span> <span class="audit-value">${result.iterations}</span></div>
+            <div class="audit-item"><span class="audit-label">Citations:</span> <span class="audit-value">${Object.keys(log.node_hashes).join(', ') || 'None'}</span></div>
             <div class="audit-item"><span class="audit-label">Security:</span> <span class="audit-value">${log.anonymized ? 'PII-Sanitized' : 'Direct'}</span></div>
-            <div class="audit-item"><span class="audit-label">Deterministic:</span> <span class="audit-value">${trace.is_valid ? 'Verified' : 'Failed'}</span></div>
+            <div class="audit-item"><span class="audit-label">Time (ms):</span> <span class="audit-value">${log.execution_time_ms}</span></div>
         `;
     }
 
@@ -204,8 +205,8 @@
         try {
             const result = await queryCompliance(query);
             if (result) {
-                appendMessage('AeroMind AI', result.draft_response);
-                updateAudit(result.validation_trace, result.traceability_log);
+                appendMessage('AeroMind AI', result.answer);
+                updateAudit(result);
             }
         } catch (err) {
             appendMessage('Error', `Audit failed: ${err.message}`);

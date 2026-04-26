@@ -65,13 +65,26 @@ async def ingest_easa_xml(
 
     try:
         logger.info(f"Ingesting EASA XML: {file.filename} ({len(content)} bytes)")
-        rules = parse_easa_xml(tmp_path)
+        raw_nodes = parse_easa_xml(tmp_path)
 
-        if not rules:
+        if not raw_nodes:
             raise HTTPException(
                 status_code=422,
                 detail="No EASA requirements found in the uploaded XML.",
             )
+
+        # Convert RegulationNode to EasaRequirement for the engine
+        from schemas import EasaRequirement
+        rules = [
+            EasaRequirement(
+                id=node.node_id,
+                text=node.content,
+                type=node.category,
+                source_title=node.node_id, # Fallback
+                amc_gm_info="Hard Law" if node.category in ["Regulation", "IR"] else "Soft Law"
+            )
+            for node in raw_nodes
+        ]
 
         engine.build_rule_index(rules)
         logger.info(f"EASA ingestion complete: {len(rules)} rules indexed.")

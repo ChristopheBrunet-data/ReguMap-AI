@@ -7,7 +7,7 @@ It implements the DO-326A determinism via Cypher enforcement.
 """
 import os
 import logging
-from neo4j import AsyncDriver, AsyncGraphDatabase
+from neo4j import AsyncDriver, AsyncGraphDatabase, Driver, GraphDatabase
 
 logger = logging.getLogger("regumap-ai.graph-schema")
 logging.basicConfig(level=logging.INFO)
@@ -44,6 +44,33 @@ async def init_schema_async(driver: AsyncDriver):
             records = await result.data()
             logger.info(f"Current constraints: {len(records)} found.")
             
+            logger.info("Neo4j schema initialization complete. ✅")
+        except Exception as e:
+            logger.error(f"Failed to initialize Neo4j schema: {e}")
+            raise
+def initialize_schema(driver: Driver):
+    """
+    Executes the Cypher schema definitions synchronously.
+    """
+    logger.info("Initializing Neo4j schema synchronously...")
+    schema_path = os.path.join(os.path.dirname(__file__), "init_schema.cypher")
+    
+    if not os.path.exists(schema_path):
+        logger.error(f"Schema file not found at {schema_path}")
+        return
+        
+    with open(schema_path, "r", encoding="utf-8") as f:
+        content = f.read()
+        
+    lines = content.splitlines()
+    clean_lines = [line for line in lines if not line.strip().startswith("//")]
+    clean_content = "\n".join(clean_lines)
+    queries = [q.strip() for q in clean_content.split(';') if q.strip()]
+    
+    with driver.session() as session:
+        try:
+            for query in queries:
+                session.run(query)
             logger.info("Neo4j schema initialization complete. ✅")
         except Exception as e:
             logger.error(f"Failed to initialize Neo4j schema: {e}")
