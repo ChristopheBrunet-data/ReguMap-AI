@@ -103,7 +103,34 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
+    swagger_ui_parameters={"persistAuthorization": True},
 )
+
+# ── Security Schemes (OAS 3.1) ────────────────────────────────────────────────
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    openapi_schema = get_openapi(
+        title=API_TITLE,
+        version=API_VERSION,
+        description=API_DESCRIPTION,
+        routes=app.routes,
+    )
+    openapi_schema["components"]["securitySchemes"] = {
+        "BearerAuth": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": "Enter JWT token from ReguMap-AI Gateway"
+        }
+    }
+    # Apply security globally for Swagger UI visibility
+    openapi_schema["security"] = [{"BearerAuth": []}]
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+from fastapi.openapi.utils import get_openapi
+app.openapi = custom_openapi
 
 # CORS — allow the React PWA frontend (and dev servers)
 app.add_middleware(

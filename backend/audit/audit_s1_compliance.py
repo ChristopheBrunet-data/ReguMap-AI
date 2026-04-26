@@ -53,7 +53,7 @@ def run_compliance_audit():
         for f in findings:
             print(f"    - File: {f['file']}")
             print(f"      Reason: {f['reason']}")
-            print(f"      Matches: {f['matches']}")
+            print(f"      Match: {f['match']} (Line {f['line']})")
         sys.exit(1)
     
     print("[+] COMPLIANCE SUCCESS: No forbidden patterns found.")

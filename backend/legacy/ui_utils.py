@@ -5,8 +5,52 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 from fpdf import FPDF
+import requests
 from schemas import ComplianceAudit
 from parser import EasaXmlParser
+from typing import List, Dict, Any
+
+class AeroMindAPIClient:
+    """Client HTTP pour l'API AeroMind Compliance (OAS 3.1)"""
+    
+    def __init__(self, base_url: str = "http://localhost:8000/api/v1"):
+        self.base_url = base_url
+        # Récupération du JWT depuis la session Streamlit
+        self.token = st.session_state.get("jwt_token", "DEMO_TOKEN_CERTIFIABLE")
+        self.headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.token}"
+        }
+
+    def run_single_audit(self, req_id: str, question: str) -> Dict[str, Any]:
+        """Exécute la pipeline multi-agents sur une exigence unique."""
+        payload = {
+            "requirement_id": req_id,
+            "refined_question": question
+        }
+        response = requests.post(f"{self.base_url}/audit/compliance", json=payload, headers=self.headers)
+        response.raise_for_status()
+        return response.json()
+
+    def run_batch_audit(self, req_ids: List[str], question: str = "Standard Compliance Check") -> Dict[str, Any]:
+        """Exécute un audit en lot (Max 50) - Correction Schéma Appliquée."""
+        payload = {
+            "requirement_ids": req_ids,
+            "refined_question": question
+        }
+        response = requests.post(f"{self.base_url}/audit/batch", json=payload, headers=self.headers)
+        response.raise_for_status()
+        return response.json()
+
+    def get_graph_context(self, node_id: str, depth: int = 2) -> Dict[str, Any]:
+        """Traverse le graphe Neo4j pour l'explicabilité (XAI)."""
+        payload = {
+            "node_id": node_id,
+            "depth": depth
+        }
+        response = requests.post(f"{self.base_url}/graph/traverse", json=payload, headers=self.headers)
+        response.raise_for_status()
+        return response.json()
 
 def load_all_requirements(xml_paths: dict, normalize_domain_func) -> list:
     all_reqs = []

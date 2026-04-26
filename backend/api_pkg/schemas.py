@@ -116,9 +116,9 @@ class AuditResultResponse(BaseModel):
     confidence_score: float
     suggested_fix: Optional[str] = None
     cross_refs_used: List[str] = Field(default_factory=list)
-    validation_score: Optional[float] = None
-    evidence_crop_path: Optional[str] = None
-    agent_trace: Optional[str] = None
+    validation_score: Optional[float] = Field(None, description="Score from the Critic agent (0.0 to 1.0)")
+    evidence_crop_path: Optional[str] = Field(None, description="Path to the visual evidence crop if available")
+    agent_trace: Optional[str] = Field(None, description="Chain-of-thought trace for human audit")
 
 
 class BatchAuditRequest(BaseModel):
@@ -129,6 +129,15 @@ class BatchAuditRequest(BaseModel):
         max_length=50,
     )
     refined_question: str = Field("Standard Compliance Check")
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [{
+                "requirement_ids": ["ADR.OR.B.005", "AMC1.ORO.GEN.200"],
+                "refined_question": "Check for aerodrome management system documentation",
+            }]
+        }
+    }
 
 
 class BatchAuditResponse(BaseModel):

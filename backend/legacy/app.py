@@ -30,6 +30,7 @@ if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
     st.session_state.user_role = None
     st.session_state.user_id = None
+    st.session_state.jwt_token = None
 
 def login():
     st.sidebar.title("🔐 Secure Login")
@@ -41,6 +42,7 @@ def login():
         st.session_state.authenticated = True
         st.session_state.user_role = role
         st.session_state.user_id = user
+        st.session_state.jwt_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.demo-payload" # Mock JWT
         security.log_audit_event(user, "LOGIN")
         st.rerun()
 

@@ -1,9 +1,12 @@
 import streamlit as st
 import pandas as pd
 import os
+import requests
 from datetime import datetime
 import ui_utils
+from ui_utils import AeroMindAPIClient
 import security
+from schemas import ComplianceAudit
 from refiner import QueryRefiner
 
 st.set_page_config(page_title="Compliance Audit | ReguMap AI", layout="wide")
@@ -70,15 +73,28 @@ if st.button("🚀 Run Agentic Compliance Audit", type="primary"):
         st.session_state.engine.run_semantic_pre_filtering(threshold=similarity_threshold)
 
         if search_query and st.session_state.engine.vectorstore:
-            scored = st.session_state.engine.hybrid_search(search_keywords, k=limit_audits)
-            reqs_to_audit = [r for r, _ in scored]
+            # Consistent hybrid search via API
+            search_payload = {"query": search_keywords, "k": limit_audits}
+            search_headers = {"Authorization": f"Bearer {st.session_state.jwt_token}"}
+            search_res = requests.post("http://localhost:8000/api/v1/search", json=search_payload, headers=search_headers)
+            search_res.raise_for_status()
+            reqs_to_audit = [st.session_state.engine._rule_lookup[item["rule_id"]] for item in search_res.json()["results"] if item["rule_id"] in st.session_state.engine._rule_lookup]
         else:
             reqs_to_audit = filtered_reqs[:limit_audits]
 
-        for i, req in enumerate(reqs_to_audit):
-            res = st.session_state.engine.evaluate_compliance(req, refined_question=refined_question)
-            st.session_state.audit_results.append(res)
-            progress_bar.progress(30 + int(70 * (i + 1) / len(reqs_to_audit)))
+        client = AeroMindAPIClient()
+        
+        # We can use the batch endpoint for performance!
+        req_ids = [r.id for r in reqs_to_audit]
+        with st.spinner(f"Agentic Analysis in progress for {len(req_ids)} rules..."):
+            try:
+                batch_res = client.run_batch_audit(req_ids, question=refined_question)
+                for res_dict in batch_res["results"]:
+                    # Map API result to internal model
+                    st.session_state.audit_results.append(ComplianceAudit(**res_dict))
+                progress_bar.progress(100)
+            except Exception as e:
+                st.error(f"API Audit Failed: {e}")
         
         ui_utils.save_audit_history(st.session_state.audit_results, "data/history")
         st.success("Audit Complete!")
