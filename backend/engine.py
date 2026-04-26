@@ -145,27 +145,39 @@ Cross-Referenced Rules:
 
         # ── FAISS Index ──────────────────────────────────────────────────
         if os.path.exists(faiss_path):
-            print(f"Decrypting and loading FAISS index from disk: {faiss_path}")
+            print(f"Attempting to load and decrypt FAISS index from disk: {faiss_path}")
             # 🔐 Decrypt FAISS files into temp directory
             temp_path = os.path.join(self.db_path, "temp_faiss")
             os.makedirs(temp_path, exist_ok=True)
-            for f_name in ["index.faiss", "index.pkl"]:
-                f_path = os.path.join(faiss_path, f_name + ".enc")
-                if os.path.exists(f_path):
-                    with open(f_path, "rb") as f:
-                        enc_data = f.read()
-                    with open(os.path.join(temp_path, f_name), "wb") as f:
-                        f.write(security.decrypt_data(enc_data))
             
-            self.vectorstore = FAISS.load_local(
-                temp_path, self.embeddings, allow_dangerous_deserialization=True
-            )
-            # Clean up temp files
-            for f_name in ["index.faiss", "index.pkl"]:
-                os.remove(os.path.join(temp_path, f_name))
-            os.rmdir(temp_path)
-            print(f"FAISS loaded and decrypted ({self.vectorstore.index.ntotal} vectors).")
-        else:
+            try:
+                for f_name in ["index.faiss", "index.pkl"]:
+                    f_path = os.path.join(faiss_path, f_name + ".enc")
+                    if os.path.exists(f_path):
+                        with open(f_path, "rb") as f:
+                            enc_data = f.read()
+                        with open(os.path.join(temp_path, f_name), "wb") as f:
+                            f.write(security.decrypt_data(enc_data))
+                
+                self.vectorstore = FAISS.load_local(
+                    temp_path, self.embeddings, allow_dangerous_deserialization=True
+                )
+                print(f"FAISS loaded and decrypted ({self.vectorstore.index.ntotal} vectors).")
+            except Exception as e:
+                print(f"[SECURITY] FAISS decryption failed: {e}. Key might have changed.")
+                print("[SELF-HEAL] Clearing corrupted index to allow fresh rebuild.")
+                import shutil
+                if os.path.exists(faiss_path):
+                    shutil.rmtree(faiss_path)
+                self.vectorstore = None
+            finally:
+                # Clean up temp files
+                if os.path.exists(temp_path):
+                    import shutil
+                    shutil.rmtree(temp_path)
+        
+        # If loading failed or index didn't exist, build from scratch
+        if self.vectorstore is None:
             print(f"Building FAISS index for {len(rules)} rules (local embeddings)...")
             documents = [
                 Document(

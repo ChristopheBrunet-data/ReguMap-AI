@@ -7,7 +7,8 @@ const app = express();
 const PORT = 3000;
 const BACKEND_URL = process.env.BACKEND_URL || 'http://python-backend:8000';
 
-app.use(express.json()); // Required to read body for WAF
+app.use(express.json({ limit: '100mb' })); // Increased for large ingestion metadata
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 console.log('--- ReguMap-AI Gateway ---');
 console.log(`Target Backend: ${BACKEND_URL}`);
@@ -29,7 +30,7 @@ if (!JWT_SECRET) {
 }
 
 app.use((req, res, next) => {
-  const publicRoutes = ['/api/v1/auth/login', '/health'];
+  const publicRoutes = ['/api/v1/auth/login', '/health', '/api/v1/ingest/easa', '/api/v1/ingest/status'];
   if (publicRoutes.includes(req.path)) {
     return next();
   }
@@ -53,14 +54,18 @@ app.use((req, res, next) => {
 });
 
 // Proxy all requests to the Python Backend
-app.use('/', createProxyMiddleware({
+const proxyOptions = {
   target: BACKEND_URL,
   changeOrigin: true,
   onProxyReq: fixRequestBody, // RESTREAM the body after express.json()
+  proxyTimeout: 900000, // 15 minutes (900,000 ms)
+  timeout: 900000,
   pathRewrite: {
     '^/': '/', // keep paths as is
   },
-}));
+};
+
+app.use('/', createProxyMiddleware(proxyOptions));
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Gateway listening on port ${PORT}`);

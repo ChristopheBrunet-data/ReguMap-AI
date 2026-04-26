@@ -6,8 +6,8 @@ from datetime import datetime
 
 # Path resolution for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
-from backend.schemas import RegulationNode
-from backend.ingestion.hasher import generate_node_hash
+from schemas import RegulationNode
+from ingestion.hasher import generate_node_hash
 
 class HashMismatchError(Exception):
     """Exception raised when cryptographic integrity is compromised."""

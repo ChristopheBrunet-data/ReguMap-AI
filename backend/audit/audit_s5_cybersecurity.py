@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 import re
 
 # PII Sanitizer import
-from backend.security.presidio_engine import DataSanitizer
+from security.presidio_engine import DataSanitizer
 
 # Patterns from waf.js recreated in Python for dynamic verification
 INJECTION_PATTERNS = [

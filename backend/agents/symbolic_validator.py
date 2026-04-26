@@ -5,7 +5,7 @@ import sys
 import os
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
-from backend.api_pkg.schemas import ValidationTrace
+from api_pkg.schemas import ValidationTrace
 
 class SymbolicValidator:
     """

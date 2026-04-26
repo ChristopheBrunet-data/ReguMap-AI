@@ -4,10 +4,10 @@ import sys
 import os
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
-from backend.api_pkg.schemas import ValidationTrace, TraceabilityLog
-from backend.agents.symbolic_validator import SymbolicValidator
-from backend.agents.system_prompts import RESEARCHER_PROMPT, AUDITOR_PROMPT
-from backend.security.presidio_engine import DataSanitizer
+from api_pkg.schemas import ValidationTrace, TraceabilityLog
+from agents.symbolic_validator import SymbolicValidator
+from agents.system_prompts import RESEARCHER_PROMPT, AUDITOR_PROMPT
+from security.presidio_engine import DataSanitizer
 import logging
 import time
 
