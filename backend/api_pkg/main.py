@@ -139,6 +139,9 @@ app.openapi = custom_openapi
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "http://localhost",           # Frontend PWA (port 80)
+        "http://localhost:8080",      # Frontend PWA (port 8080)
+        "http://127.0.0.1",           # Frontend PWA (loopback)
         "http://localhost:3000",      # React dev server
         "http://localhost:5173",      # Vite dev server
         "http://localhost:8081",      # Local manual test frontend

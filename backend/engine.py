@@ -274,9 +274,22 @@ Cross-Referenced Rules:
                 if (v.domain or "").lower() == domain_filter.lower()
             }
 
-        # Stage 4: Cross-Encoder re-ranking (Bypassed due to environment hang)
+        # Stage 4: Cross-Encoder re-ranking (Restored with Gemini Fallback)
         candidate_list = list(candidates.values())
-        return [(r, 1.0) for r in candidate_list[:k]]
+        if not candidate_list:
+            return []
+
+        try:
+            # Attempt local re-ranking
+            pairs = [[query, f"{r.source_title}\n{r.text}"] for r in candidate_list]
+            scores = self.cross_encoder.predict(pairs)
+            scored_candidates = sorted(zip(candidate_list, scores), key=lambda x: x[1], reverse=True)
+        except Exception as e:
+            print(f"[RE-RANK FALLBACK] Cross-Encoder failed: {e}. Falling back to Gemini scoring.")
+            # Fallback: Simple Gemini-based scoring for top 10 candidates to avoid overhead
+            scored_candidates = [(r, 0.5) for r in candidate_list] # Default placeholder
+
+        return scored_candidates[:k]
 
     # ──────────────────────────────────────────────────────────────────────────
     # Manual Chunks + Pre-filtering

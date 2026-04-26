@@ -29,6 +29,11 @@ if (!JWT_SECRET) {
 }
 
 app.use((req, res, next) => {
+  const publicRoutes = ['/api/v1/auth/login', '/health'];
+  if (publicRoutes.includes(req.path)) {
+    return next();
+  }
+
   const authHeader = req.headers['authorization'];
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     console.log('[GATEWAY] JWT Missing or Malformed - Blocking request.');

@@ -1,6 +1,6 @@
 {
     "status": "VALIDATED",
-    "timestamp": "2026-04-26T16:43:25.130010",
+    "timestamp": "2026-04-26T16:44:54.361161",
     "scope": "Sprint 2 \u2014 Infrastructure & Network Isolation",
     "audited_file": "docker-compose.yml",
     "audited_file_hash": "f73fb3ddb163f0b5dcafc7859b045d5c5b959cb832ea4dffe2f93e8ed3f9e1dd",
@@ -9,5 +9,5 @@
         "Neo4j Isolation (No port mapping)",
         "VPC Topology (Internal Network: true)"
     ],
-    "audit_signature": "6ab93654cbffbb99e96fb8430733076da83da59e6696456ee0fdd9e414cbae0a"
+    "audit_signature": "b4b1aeb9810e460253a1dce8bb6f5b8f58f46fb703d6a6f882a712f584c7c017"
 }

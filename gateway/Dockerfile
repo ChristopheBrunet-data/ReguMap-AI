@@ -8,7 +8,8 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install --production
 
-COPY server.js .
+# Inclusion of all local modules including waf.js
+COPY . .
 
 # Expose port 3000 to the host
 EXPOSE 3000

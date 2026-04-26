@@ -3,7 +3,7 @@
  * Strictly decoupled, zero business logic.
  */
 
-const GATEWAY_URL = 'http://localhost:8000';
+const GATEWAY_URL = 'http://localhost:3000';
 
 async function secureFetch(endpoint, options = {}) {
     const token = sessionStorage.getItem('jwt_token');
