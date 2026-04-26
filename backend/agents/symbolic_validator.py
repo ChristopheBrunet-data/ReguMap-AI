@@ -16,7 +16,7 @@ class SymbolicValidator:
     def __init__(self, driver: Driver):
         self.driver = driver
         # Regex to detect standard regulatory IDs (e.g., AMC1.ORO.GEN.200, Part-IS.AR.10)
-        self.id_pattern = re.compile(r'[A-Z0-9]+(?:\.[A-Z0-9]+)+')
+        self.id_pattern = re.compile(r'[a-zA-Z0-9\-]+(?:\.[a-zA-Z0-9\-]+)+')
 
     def _extract_entities(self, assertion: str) -> List[str]:
         """Extrait les identifiants réglementaires (entités) de l'assertion du LLM."""

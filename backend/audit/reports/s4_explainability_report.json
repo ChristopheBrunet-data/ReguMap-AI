@@ -1,11 +1,12 @@
 {
     "status": "VALIDATED",
-    "timestamp": "2026-04-26T12:57:11.732556",
-    "scope": "Sprint 4 \u2014 Hybrid Intelligence & XAI",
-    "certification_standard": "NPA 2025-07 (Explainability)",
-    "test_payload_seal": "9ccd190856583264c31a31bdfc55c7cd58e972a465bc884ac9b87c3e43c1fac0",
-    "metrics": {
-        "is_valid": true,
-        "iterations": 1
-    }
+    "timestamp": "2026-04-26T13:57:04.829319",
+    "scope": "Sprint 4 \u2014 XAI Explainability",
+    "checks": [
+        "TraceabilityLog Schema Enforcement",
+        "Cypher Query Transparency",
+        "Node Hash Exposure (Cryptographic Proof)",
+        "Auto-Correction Loop Verification"
+    ],
+    "audit_signature": "58a4aec67b57e645d49b3cd83ec913d7e9e41892ca9fdf204363bfacbac380e2"
 }
