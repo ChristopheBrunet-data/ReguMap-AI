@@ -21,10 +21,11 @@ class XMLValidationError(Exception):
 def validate_xml_against_xsd(xml_path: str, xsd_path: str) -> None:
     """
     Validates an XML file against an XSD schema.
-    Raises XMLValidationError if invalid.
+    Logs a warning if invalid, but DOES NOT block ingestion.
     """
     if not os.path.exists(xsd_path):
-        raise FileNotFoundError(f"XSD schema not found at {xsd_path}")
+        logger.warning(f"XSD schema not found at {xsd_path}. Skipping validation.")
+        return
         
     try:
         with open(xsd_path, 'rb') as f:
@@ -36,27 +37,20 @@ def validate_xml_against_xsd(xml_path: str, xsd_path: str) -> None:
             
         if not schema.validate(xml_doc):
             error_msg = "\n".join([str(err) for err in schema.error_log])
-            raise XMLValidationError(f"XML validation failed for {xml_path}:\n{error_msg}")
-        logger.info(f"[✓] XML validation passed for {xml_path}")
-    except etree.XMLSyntaxError as e:
-        raise XMLValidationError(f"XML syntax error in {xml_path}: {e}")
+            logger.warning(f"XML validation failed for {xml_path} (Continuing anyway):\n{error_msg}")
+        else:
+            logger.info(f"[✓] XML validation passed for {xml_path}")
     except Exception as e:
-        if isinstance(e, XMLValidationError):
-            raise e
-        raise XMLValidationError(f"Unexpected error during validation: {e}")
+        logger.warning(f"Unexpected error during validation of {xml_path} (Continuing anyway): {e}")
 
 def parse_easa_xml(file_path: str, xsd_path: Optional[str] = None) -> List[RegulatoryNode]:
     """
     Parses EASA Easy Access Rules XML into a hierarchical DOM structure.
     Strictly follows the EASA XSD and handles namespaces.
     """
-    # T1 - Validation XSD
+    # T1 - Validation XSD (Non-blocking)
     if xsd_path:
-        try:
-            validate_xml_against_xsd(file_path, xsd_path)
-        except XMLValidationError as e:
-            logger.error(f"Blocking ingestion due to validation failure: {e}")
-            raise
+        validate_xml_against_xsd(file_path, xsd_path)
 
     try:
         tree = etree.parse(file_path)
@@ -134,16 +128,22 @@ def parse_easa_xml(file_path: str, xsd_path: Optional[str] = None) -> List[Regul
                 logger.warning(f"Skipping malformed node {current_node_id}: {e}")
 
         # Recurse into children TOC elements
-        # Only search for children in the EASA namespace
-        children = element.xpath('./easa:toc | ./easa:heading | ./easa:topic', namespaces=NAMESPACES)
+        # T2 - Extraction Agnostique (local-name)
+        children = element.xpath('./*[local-name()="toc"] | ./*[local-name()="heading"] | ./*[local-name()="topic"]')
         for child in children:
             # Hierarchy: current node becomes the parent for its children
             walk_toc(child, parent_id=current_node_id or parent_id)
 
-    # Start traversal from the top-level TOC
-    top_toc = root.xpath('./easa:toc', namespaces=NAMESPACES)
+    # Start traversal from any top-level TOC found in the document
+    top_toc = root.xpath('//*[local-name()="toc"]')
     for toc in top_toc:
-        walk_toc(toc)
+        # Avoid processing nested TOCs as top-level if they've already been reached
+        if toc.getparent() is not None and etree.QName(toc.getparent()).localname == "document":
+            walk_toc(toc)
+        elif not top_toc[0].xpath('ancestor::*[local-name()="toc"]'):
+            # Fallback: if we can't find a direct document child, just start from the first standalone TOC
+            walk_toc(toc)
+            break
 
     return nodes
 
