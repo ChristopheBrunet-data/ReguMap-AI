@@ -57,6 +57,7 @@ class RegulatoryKnowledgeGraph:
         """
         Populates graph nodes and edges from validated regulatory entities.
         Uses in-memory index to ensure entity resolution (T1.1).
+        Detects SUPERSEDES relationships via version comparison (Task 2).
         """
         import logging
         logger = logging.getLogger("regumap-ai.graph")
@@ -71,12 +72,17 @@ class RegulatoryKnowledgeGraph:
             if not self.graph.has_node(agency):
                 self.graph.add_node(agency, node_type="Agency", label=agency, domain=None)
 
+        # Track base IDs → versions for SUPERSEDES detection
+        base_id_versions: Dict[str, List[RegulatoryNode]] = {}
+
         for rule in rules:
-            self._rule_index[rule.node_id] = rule # Note: legacy compatibility if needed
+            self._rule_index[rule.node_id] = rule
             domain = rule.metadata.get("domain", "unknown")
             agency = DOMAIN_TO_AGENCY.get(domain, "EASA")
+            version = rule.metadata.get("version", "1")
+            status = rule.metadata.get("status", "active")
 
-            # Add rule node
+            # Add rule node with version metadata
             self.graph.add_node(
                 rule.node_id,
                 node_type=rule.node_type,
@@ -84,39 +90,86 @@ class RegulatoryKnowledgeGraph:
                 domain=domain,
                 law_type=rule.metadata.get("law_type", "Unknown"),
                 text_preview=rule.content[:200] if rule.content else "",
+                version=version,
+                status=status,
+                content_hash=rule.content_hash,
             )
 
             # Edge: Agency → Regulation
             self.graph.add_edge(agency, rule.node_id, edge_type="PUBLISHES", weight=1.0)
 
+            # Track versions by base ID (strip trailing version suffix)
+            base_id = self._extract_base_id(rule.node_id)
+            if base_id not in base_id_versions:
+                base_id_versions[base_id] = []
+            base_id_versions[base_id].append(rule)
+
             # 2. CRÉATION DES RELATIONS AVEC BARRIÈRE DE SÉCURITÉ O(1) (T1.1 Étape 2.4)
-            # Detect cross-references in rule text
             ref_ids = set(EASA_RULE_ID_PATTERN.findall(rule.content)) - {rule.node_id}
             
             for ref_id in ref_ids:
                 clean_ref_id = self._standardize_id(ref_id)
-                
-                # T1.1 - LA BARRIÈRE DE SÉCURITÉ O(1)
                 target_node = self.entity_index.get(clean_ref_id)
                 
                 if target_node:
-                    # ✅ SUCCÈS : L'entité existe. On peut créer la relation.
-                    # CLARIFIES if this is AMC/GM referencing a hard law
-                    if "AMC" in rule.node_type or "GM" in rule.node_type:
-                        edge_type = "CLARIFIES"
-                    else:
-                        edge_type = "REFERENCES"
-                        
+                    edge_type = self._infer_edge_type(rule, target_node)
                     self.graph.add_edge(
                         rule.node_id, target_node.node_id,
                         edge_type=edge_type,
                         weight=0.9,
                     )
                 else:
-                    # ❌ ÉCHEC : Référence brisée (Nœud fantôme évité)
                     logger.warning(f"Référence brisée détectée : {ref_id} cité dans {rule.node_id} est introuvable.")
 
-        logger.info(f"Graphe construit : {self.graph.number_of_nodes()} nœuds, {self.graph.number_of_edges()} relations.")
+        # 3. SUPERSEDES detection: link newer versions to older ones
+        supersedes_count = 0
+        for base_id, versions in base_id_versions.items():
+            if len(versions) > 1:
+                sorted_versions = sorted(
+                    versions,
+                    key=lambda r: r.metadata.get("version", "0"),
+                )
+                for i in range(1, len(sorted_versions)):
+                    older = sorted_versions[i - 1]
+                    newer = sorted_versions[i]
+                    self.graph.add_edge(
+                        newer.node_id, older.node_id,
+                        edge_type="SUPERSEDES",
+                        weight=1.0,
+                    )
+                    # Mark older as superseded
+                    self.graph.nodes[older.node_id]["status"] = "superseded"
+                    supersedes_count += 1
+
+        logger.info(
+            f"Graphe construit : {self.graph.number_of_nodes()} nœuds, "
+            f"{self.graph.number_of_edges()} relations, "
+            f"{supersedes_count} SUPERSEDES détectées."
+        )
+
+    @staticmethod
+    def _extract_base_id(node_id: str) -> str:
+        """Extracts base regulatory ID without version suffix.
+        e.g., 'ORO.GEN.200.v2' → 'ORO.GEN.200'
+        """
+        # Strip trailing .vN or .issN suffix
+        import re
+        return re.sub(r'\.(v|iss)\d+$', '', node_id, flags=re.IGNORECASE)
+
+    @staticmethod
+    def _infer_edge_type(source: RegulatoryNode, target: RegulatoryNode) -> str:
+        """Deterministic edge type inference based on node types."""
+        src_type = source.node_type.upper()
+        tgt_type = target.node_type.upper()
+
+        # AMC/GM → IR/Regulation = CLARIFIES
+        if ("AMC" in src_type or "GM" in src_type) and tgt_type in ("REGULATION", "IR", "CS"):
+            return "CLARIFIES"
+        # IR → Technical procedure = IMPLEMENTS
+        if src_type in ("IR", "REGULATION") and tgt_type in ("DATAMODULE", "PROCEDURE"):
+            return "IMPLEMENTS"
+        # Default
+        return "REFERENCES"
 
     def sync_to_neo4j(self, driver):
         """

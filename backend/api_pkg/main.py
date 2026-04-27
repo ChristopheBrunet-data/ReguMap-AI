@@ -23,7 +23,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api_pkg.dependencies import initialize_engine, is_engine_ready, shutdown_engine
-from api_pkg.routes import compliance, graph, ingestion, search
+from api_pkg.routes import compliance, graph, ingestion, search, watchdog
 from api_pkg.schemas import HealthResponse, HealthStatus
 from security.vault import verify_session_token
 from fastapi import Security, Depends, HTTPException, status
@@ -136,6 +136,8 @@ from fastapi.openapi.utils import get_openapi
 app.openapi = custom_openapi
 
 # CORS — allow the React PWA frontend (and dev servers)
+# NOTE: FastAPI CORS middleware does NOT support glob patterns.
+# List all allowed origins explicitly.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -145,7 +147,8 @@ app.add_middleware(
         "http://localhost:3000",      # React dev server
         "http://localhost:5173",      # Vite dev server
         "http://localhost:8081",      # Local manual test frontend
-        "https://*.run.app",          # Cloud Run
+        # Add explicit Cloud Run URLs here when deployed:
+        # "https://aeromind-frontend-XXXXX.run.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -156,13 +159,35 @@ app.add_middleware(
 # Security Dependency (Zero-Trust)
 # ──────────────────────────────────────────────────────────────────────────────
 
-auth_scheme = HTTPBearer()
+auth_scheme = HTTPBearer(auto_error=False)
 
 def validate_user(token: HTTPAuthorizationCredentials = Depends(auth_scheme)):
     """
-    MOCK VALIDATION for Local Manual Test (Bypassing Gateway).
+    JWT Validation Dependency.
+    Validates Bearer tokens using vault.verify_session_token().
+    Dev bypass: set DISABLE_AUTH=true in .env for local testing.
     """
-    return {"user_id": "QA-Tester", "role": "ADMIN"}
+    # Dev-mode bypass (controlled by environment variable)
+    if os.getenv("DISABLE_AUTH", "").lower() == "true":
+        logger.warning("AUTH BYPASSED: DISABLE_AUTH=true. Do NOT use in production.")
+        return {"user_id": "dev-user", "role": "ADMIN"}
+
+    if token is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing Bearer token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    payload = verify_session_token(token.credentials)
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return payload
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Route Registration
@@ -170,11 +195,13 @@ def validate_user(token: HTTPAuthorizationCredentials = Depends(auth_scheme)):
 
 API_PREFIX = "/api/v1"
 
-# Apply Zero-Trust validation to all functional routers (DISABLED FOR MANUAL TEST)
-app.include_router(compliance.router, prefix=API_PREFIX)
-app.include_router(search.router, prefix=API_PREFIX)
-app.include_router(graph.router, prefix=API_PREFIX)
-app.include_router(ingestion.router, prefix=API_PREFIX)
+# Apply Zero-Trust validation to all functional routers
+auth_deps = [Depends(validate_user)]
+app.include_router(compliance.router, prefix=API_PREFIX, dependencies=auth_deps)
+app.include_router(search.router, prefix=API_PREFIX, dependencies=auth_deps)
+app.include_router(graph.router, prefix=API_PREFIX, dependencies=auth_deps)
+app.include_router(ingestion.router, prefix=API_PREFIX, dependencies=auth_deps)
+app.include_router(watchdog.router, prefix=API_PREFIX, dependencies=auth_deps)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

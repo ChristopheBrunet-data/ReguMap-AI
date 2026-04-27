@@ -1,10 +1,7 @@
 import re
 from neo4j import Driver
 from typing import List, Dict, Any, Tuple
-import sys
-import os
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 from api_pkg.schemas import ValidationTrace
 
 class SymbolicValidator:
@@ -16,7 +13,7 @@ class SymbolicValidator:
     def __init__(self, driver: Driver):
         self.driver = driver
         # Hardened regex for EASA/FAA regulatory IDs (DO-178C/326A compliance)
-        # Supports: AMC 20-27, CM-AS-001, Part-IS.AR.10, ORO.GEN.200, etc.
+        # Supports: AMC 20-27, CAT.IDE.A.190, Part-IS.AR.10, ORO.GEN.200, etc.
         self.id_pattern = re.compile(r'\b(?:AMC\d*|GM\d*|CS|Part-[A-Z]+|ORO|CAT|SPA|ADR|CM)(?:[\.\-\s][a-zA-Z0-9\-]+)+\b')
 
     def _extract_entities(self, assertion: str) -> List[str]:

@@ -20,12 +20,23 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from tenacity import retry, wait_exponential, stop_after_attempt
+from neo4j import Driver
 
 from schemas import EasaRequirement, ManualChunk, ComplianceAudit, AuditStatus
 from knowledge_graph import RegulatoryKnowledgeGraph
 
 # Re-ranker threshold: below this, flag as Noise/Informational
 RERANK_THRESHOLD = 0.6
+
+# Output sanitization patterns (multi-pattern, case-insensitive)
+# Catches prompt leakage attempts with spacing/unicode evasion
+_OUTPUT_GUARDRAIL_PATTERNS = [
+    re.compile(r'ignore\s+(?:all\s+)?(?:previous\s+)?instructions', re.IGNORECASE),
+    re.compile(r'system\s*prompt', re.IGNORECASE),
+    re.compile(r'you\s+are\s+now', re.IGNORECASE),
+    re.compile(r'\bforget\s+(?:everything|your)', re.IGNORECASE),
+    re.compile(r'\bjailbreak\b', re.IGNORECASE),
+]
 
 # Known cross-agency reference data for conflict detection
 CROSS_AGENCY_REFS = {
@@ -507,7 +518,8 @@ class ComplianceBoard:
     Researcher (+ noise gate) → Conflict Detector (cross-agency) → Auditor (multimodal) → Critic (back-link)
     """
 
-    def __init__(self, api_key: str, model_name: str = "gemini-2.5-flash"):
+    def __init__(self, api_key: str, model_name: str = "gemini-2.5-flash",
+                 neo4j_driver: Optional[Driver] = None):
         llm = ChatGoogleGenerativeAI(
             model=model_name, temperature=0.0, google_api_key=api_key,
         )
@@ -516,6 +528,12 @@ class ComplianceBoard:
         self.auditor = AuditorAgent(llm, "Auditor")
         self.critic = CriticAgent(llm, "Critic")
         self.vision = VisionAnalyzer(api_key, model_name=model_name)
+
+        # Optional SymbolicValidator for cryptographic verification (F5)
+        self._symbolic_validator = None
+        if neo4j_driver is not None:
+            from agents.symbolic_validator import SymbolicValidator
+            self._symbolic_validator = SymbolicValidator(neo4j_driver)
 
     def run_full_audit(
         self,
@@ -640,10 +658,13 @@ class ComplianceBoard:
             )
             trace_parts.append(f"AUDITOR: FAILED — {type(e).__name__}")
 
-        # 🔐 OUTPUT SANITIZATION: Check audit output
+        # 🔐 OUTPUT SANITIZATION: Multi-pattern guardrail (F14)
         quote = audit_result.evidence_quote
-        if "ignore" in quote.lower() or "system prompt" in quote.lower():
-            audit_result.evidence_quote = "[🛡️ Redacted by Guardrail]"
+        for pattern in _OUTPUT_GUARDRAIL_PATTERNS:
+            if pattern.search(quote):
+                audit_result.evidence_quote = "[🛡️ Redacted by Guardrail]"
+                trace_parts.append("GUARDRAIL: Output sanitized — prompt leakage pattern detected")
+                break
 
         trace_parts.append(
             f"AUDITOR: status={audit_result.status}, "
@@ -684,11 +705,30 @@ class ComplianceBoard:
                 f"citation_ok={critic_result.citation_verified}"
             )
 
+        # ── Stage 5: Symbolic Validation (if Neo4j available) ───────────────
+        symbolic_valid = True
+        if self._symbolic_validator:
+            try:
+                validation_trace = self._symbolic_validator.validate_assertion(
+                    audit_result.evidence_quote + " " + " ".join(audit_result.cross_refs_used)
+                )
+                if not validation_trace.is_valid:
+                    symbolic_valid = False
+                    trace_parts.append(
+                        f"SYMBOLIC_VALIDATOR: FAILED — hallucinated refs: {validation_trace.missing_nodes}"
+                    )
+                else:
+                    trace_parts.append(
+                        f"SYMBOLIC_VALIDATOR: OK — {len(validation_trace.verified_nodes)} refs verified"
+                    )
+            except Exception as e:
+                trace_parts.append(f"SYMBOLIC_VALIDATOR: ERROR — {e}")
+
         # ── Assemble final result ─────────────────────────────────────────
         final_status = audit_result.status
         confidence = audit_result.confidence_score
 
-        if confidence < 0.6 or validation_score < 0.6:
+        if confidence < 0.6 or validation_score < 0.6 or not symbolic_valid:
             final_status = AuditStatus.REQUIRES_HUMAN_REVIEW
 
         return ComplianceAudit(

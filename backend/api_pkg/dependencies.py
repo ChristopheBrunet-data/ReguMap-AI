@@ -55,7 +55,7 @@ class MockNeo4jDriver:
     """Mock for local dev without Docker."""
     def __init__(self):
         self.db = {
-            "CM-AS-001": "sha256_7f8e9a0b1c2d3e4f5a6b7c8d9e0f",
+            "CAT.IDE.A.190": "sha256_7f8e9a0b1c2d3e4f5a6b7c8d9e0f",
             "ADR.OR.B.005": "sha256_1a2b3c4d5e6f7g8h9i0j",
             "Part-IS.AR.10": "sha256_k1l2m3n4o5p6q7r8s9t0"
         }

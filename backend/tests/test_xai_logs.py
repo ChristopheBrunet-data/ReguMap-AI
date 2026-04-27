@@ -21,8 +21,10 @@ class TestXAILogs(unittest.TestCase):
         self.mock_driver = MagicMock()
         
         # Override dependencies
+        from api_pkg.main import validate_user
         app.dependency_overrides[get_engine] = lambda: self.mock_engine
         app.dependency_overrides[get_neo4j_driver] = lambda: self.mock_driver
+        app.dependency_overrides[validate_user] = lambda: {"username": "test_auditor", "role": "admin"}
 
     def tearDown(self):
         app.dependency_overrides = {}
@@ -35,14 +37,14 @@ class TestXAILogs(unittest.TestCase):
         self.mock_engine.answer_regulatory_question.return_value = "Verified compliance with ORO.FTL.210."
         
         # Mock validator (internal to orchestrator, we mock the query engine response)
-        with patch("agents.orchestrator.SymbolicValidator.validate_references") as mock_validate:
+        with patch("agents.orchestrator.SymbolicValidator.validate_assertion") as mock_validate:
             mock_validate.return_value = ValidationTrace(
                 is_valid=True,
                 verified_nodes=["ORO.FTL.210"],
                 cryptographic_hashes={"ORO.FTL.210": "abc123sha256"}
             )
             
-            response = self.client.post("/api/v1/audit/ask", params={"query": "Am I compliant?"})
+            response = self.client.post("/api/v1/audit/ask", json={"question": "Am I compliant?"})
             
             # 1. Check HTTP Status
             self.assertEqual(response.status_code, 200)
@@ -51,11 +53,11 @@ class TestXAILogs(unittest.TestCase):
             
             # 2. Check XAI presence
             self.assertIn("traceability_log", payload)
-            self.assertIn("cryptographic_hashes", payload["traceability_log"])
-            self.assertIn("validation_query", payload["traceability_log"])
+            self.assertIn("node_hashes", payload["traceability_log"])
+            self.assertIn("cypher_query_executed", payload["traceability_log"])
             
             # 3. Check data integrity
-            hashes = payload["traceability_log"]["cryptographic_hashes"]
+            hashes = payload["traceability_log"]["node_hashes"]
             self.assertEqual(hashes["ORO.FTL.210"], "abc123sha256")
             
             # Print the payload for report

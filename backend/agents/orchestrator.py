@@ -1,9 +1,6 @@
 from __future__ import annotations
 from typing import List, Dict, Optional, TYPE_CHECKING
-import sys
-import os
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 from api_pkg.schemas import ValidationTrace, TraceabilityLog
 from agents.symbolic_validator import SymbolicValidator
 from agents.system_prompts import RESEARCHER_PROMPT, AUDITOR_PROMPT

@@ -1,14 +1,17 @@
 """
-Compliance Audit Routes — Exposes the 4-agent pipeline via HTTP.
+Compliance Audit Routes — Exposes the 5-agent pipeline via HTTP.
 
+POST /api/v1/audit/ask          — Certifiable Q&A via orchestrator loop
 POST /api/v1/audit/compliance   — Single requirement audit
 POST /api/v1/audit/batch        — Batch audit (up to 50 rules)
+POST /api/v1/audit/report       — Batch audit + PDF report generation
 
 These endpoints wrap ComplianceEngine.evaluate_compliance(), which runs
-the full 4-agent pipeline (Researcher → Conflict → Auditor → Critic).
+the full 5-agent pipeline (Researcher → Conflict → Auditor → Critic → SymbolicValidator).
 """
 
 import logging
+import os
 import time
 from typing import List
 
@@ -54,7 +57,7 @@ async def ask_compliance(
     """Certifiable Q&A via orchestrator loop."""
     query = request.question
     validator = SymbolicValidator(driver)
-    orchestrator = ComplianceOrchestrator(engine, validator)
+    orchestrator = ComplianceOrchestrator(validator)
 
     try:
         state = orchestrator.run(query)
@@ -84,8 +87,8 @@ async def ask_compliance(
     },
     summary="Run a single compliance audit",
     description=(
-        "Runs the full 4-agent compliance pipeline (Researcher → Conflict Detector → "
-        "Auditor → Critic) for a single EASA requirement against the loaded manual. "
+        "Runs the full 5-agent compliance pipeline (Researcher → Conflict Detector → "
+        "Auditor → Critic → SymbolicValidator) for a single EASA requirement. "
         "Returns the audit result with evidence coordinates, confidence score, "
         "and agent trace for full traceability."
     ),
@@ -94,7 +97,7 @@ async def audit_compliance(
     request: AuditRequest,
     engine: ComplianceEngine = Depends(get_engine),
 ):
-    """Single-requirement compliance audit via the 4-agent pipeline."""
+    """Single-requirement compliance audit via the 5-agent pipeline."""
 
     if not engine.pre_filtered:
         raise HTTPException(
@@ -105,8 +108,7 @@ async def audit_compliance(
             ),
         )
 
-    # Verify the requirement exists in the index
-    requirement = engine._rule_lookup.get(request.requirement_id)
+    requirement = engine.get_requirement(request.requirement_id)
     if requirement is None:
         raise HTTPException(
             status_code=404,
@@ -156,7 +158,7 @@ async def audit_compliance(
     },
     summary="Run a batch compliance audit",
     description=(
-        "Audits multiple EASA requirements sequentially. "
+        "Audits multiple EASA requirements concurrently (bounded parallelism). "
         "Maximum 50 requirements per batch. Returns aggregate statistics."
     ),
 )
@@ -164,7 +166,7 @@ async def batch_audit(
     request: BatchAuditRequest,
     engine: ComplianceEngine = Depends(get_engine),
 ):
-    """Batch compliance audit — sequential execution of multiple requirements."""
+    """Batch compliance audit — concurrent execution with bounded parallelism."""
 
     if not engine.pre_filtered:
         raise HTTPException(
@@ -175,65 +177,156 @@ async def batch_audit(
     logger.info(f"Batch audit request: {len(request.requirement_ids)} requirements")
     start = time.time()
 
-    results: List[AuditResultResponse] = []
+    import asyncio
+
+    MAX_CONCURRENT = 3
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT)
+
+    async def _audit_one(req_id: str) -> AuditResultResponse:
+        async with semaphore:
+            requirement = engine.get_requirement(req_id)
+            if requirement is None:
+                return AuditResultResponse(
+                    requirement_id=req_id,
+                    status=AuditStatusResponse.REQUIRES_HUMAN_REVIEW,
+                    evidence_quote=f"Requirement '{req_id}' not found in index.",
+                    source_reference="N/A",
+                    confidence_score=0.0,
+                    agent_trace="SKIP: Requirement not found in EASA rule index.",
+                )
+
+            try:
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: engine.evaluate_compliance(
+                        requirement=requirement,
+                        refined_question=request.refined_question,
+                    ),
+                )
+                status_str = result.status.value if hasattr(result.status, 'value') else str(result.status)
+                return AuditResultResponse(
+                    requirement_id=result.requirement_id,
+                    status=AuditStatusResponse(status_str),
+                    evidence_quote=result.evidence_quote,
+                    source_reference=result.source_reference,
+                    confidence_score=result.confidence_score,
+                    suggested_fix=result.suggested_fix,
+                    cross_refs_used=result.cross_refs_used,
+                    validation_score=result.validation_score,
+                    evidence_crop_path=result.evidence_crop_path,
+                    agent_trace=result.agent_trace,
+                )
+            except Exception as e:
+                logger.error(f"Batch audit failed for {req_id}: {e}")
+                return AuditResultResponse(
+                    requirement_id=req_id,
+                    status=AuditStatusResponse.REQUIRES_HUMAN_REVIEW,
+                    evidence_quote=f"Pipeline error: {str(e)[:200]}",
+                    source_reference="System Error",
+                    confidence_score=0.0,
+                    agent_trace=f"SELF-HEAL: {type(e).__name__}",
+                )
+
+    results = await asyncio.gather(
+        *[_audit_one(req_id) for req_id in request.requirement_ids]
+    )
+
     counters = {"Compliant": 0, "Partial": 0, "Gap": 0, "Requires Human Review": 0}
-
-    for req_id in request.requirement_ids:
-        requirement = engine._rule_lookup.get(req_id)
-        if requirement is None:
-            # Skip unknown requirements with a warning result
-            results.append(AuditResultResponse(
-                requirement_id=req_id,
-                status=AuditStatusResponse.REQUIRES_HUMAN_REVIEW,
-                evidence_quote=f"Requirement '{req_id}' not found in index.",
-                source_reference="N/A",
-                confidence_score=0.0,
-                agent_trace="SKIP: Requirement not found in EASA rule index.",
-            ))
-            counters["Requires Human Review"] += 1
-            continue
-
-        try:
-            result = engine.evaluate_compliance(
-                requirement=requirement,
-                refined_question=request.refined_question,
-            )
-            status_str = result.status.value if hasattr(result.status, 'value') else str(result.status)
-            results.append(AuditResultResponse(
-                requirement_id=result.requirement_id,
-                status=AuditStatusResponse(status_str),
-                evidence_quote=result.evidence_quote,
-                source_reference=result.source_reference,
-                confidence_score=result.confidence_score,
-                suggested_fix=result.suggested_fix,
-                cross_refs_used=result.cross_refs_used,
-                validation_score=result.validation_score,
-                evidence_crop_path=result.evidence_crop_path,
-                agent_trace=result.agent_trace,
-            ))
-            if status_str in counters:
-                counters[status_str] += 1
-        except Exception as e:
-            logger.error(f"Batch audit failed for {req_id}: {e}")
-            results.append(AuditResultResponse(
-                requirement_id=req_id,
-                status=AuditStatusResponse.REQUIRES_HUMAN_REVIEW,
-                evidence_quote=f"Pipeline error: {str(e)[:200]}",
-                source_reference="System Error",
-                confidence_score=0.0,
-                agent_trace=f"SELF-HEAL: {type(e).__name__}",
-            ))
-            counters["Requires Human Review"] += 1
+    for r in results:
+        status_str = r.status.value if hasattr(r.status, 'value') else str(r.status)
+        if status_str in counters:
+            counters[status_str] += 1
 
     duration = time.time() - start
     logger.info(f"Batch audit complete: {len(results)} results in {duration:.1f}s")
 
     return BatchAuditResponse(
-        results=results,
+        results=list(results),
         total=len(results),
         compliant=counters["Compliant"],
         partial=counters["Partial"],
         gaps=counters["Gap"],
         requires_review=counters["Requires Human Review"],
         duration_seconds=round(duration, 2),
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Report Generation (Task 12)
+# ──────────────────────────────────────────────────────────────────────────────
+
+@router.post(
+    "/report",
+    summary="Generate PDF compliance report",
+    description=(
+        "Runs a batch audit and generates a formal PDF compliance report "
+        "suitable for DO-326A review."
+    ),
+)
+async def generate_report(
+    request: BatchAuditRequest,
+    engine: ComplianceEngine = Depends(get_engine),
+):
+    """Runs batch audit then generates PDF report."""
+    from fastapi.responses import FileResponse
+
+    if not engine.pre_filtered:
+        raise HTTPException(status_code=503, detail="Engine not ready.")
+
+    import asyncio
+
+    MAX_CONCURRENT = 3
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT)
+
+    async def _audit_one(req_id: str):
+        async with semaphore:
+            requirement = engine.get_requirement(req_id)
+            if requirement is None:
+                return {
+                    "requirement_id": req_id,
+                    "status": "Requires Human Review",
+                    "evidence_quote": f"Requirement '{req_id}' not found.",
+                    "source_reference": "N/A",
+                    "confidence_score": 0.0,
+                }
+            try:
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: engine.evaluate_compliance(
+                        requirement=requirement,
+                        refined_question=request.refined_question,
+                    ),
+                )
+                return {
+                    "requirement_id": result.requirement_id,
+                    "status": result.status.value if hasattr(result.status, 'value') else str(result.status),
+                    "evidence_quote": result.evidence_quote,
+                    "source_reference": result.source_reference,
+                    "confidence_score": result.confidence_score,
+                    "suggested_fix": result.suggested_fix,
+                    "cross_refs_used": result.cross_refs_used,
+                    "agent_trace": result.agent_trace,
+                }
+            except Exception as e:
+                return {
+                    "requirement_id": req_id,
+                    "status": "Requires Human Review",
+                    "evidence_quote": f"Error: {str(e)[:200]}",
+                    "source_reference": "System Error",
+                    "confidence_score": 0.0,
+                }
+
+    results = await asyncio.gather(
+        *[_audit_one(req_id) for req_id in request.requirement_ids]
+    )
+
+    from services.report_generator import generate_audit_report
+    pdf_path = generate_audit_report(list(results))
+
+    return FileResponse(
+        pdf_path,
+        media_type="application/pdf",
+        filename=os.path.basename(pdf_path),
     )

@@ -10,9 +10,10 @@ from ingestion.s1000d_parser import S1000DParser
 from ingestion.contracts import DocumentSource
 
 
-# Path to the sample S1000D XML in project root
+# Path to the sample S1000D XML in fixtures
 SAMPLE_S1000D = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    os.path.dirname(os.path.abspath(__file__)),
+    "fixtures",
     "sample_s1000d.xml",
 )
 

@@ -6,13 +6,25 @@
 const INJECTION_PATTERNS = [
     // 1. LLM Prompt Injection (Jailbreaks & Leaking)
     /(ignore|disregard)\s+(all\s+)?(previous\s+)?(instructions|directions|prompts)/i,
-    /(system\s+prompt|you\s+are\s+now|bypass|jailbreak|override)/i,
+    /(system\s+prompt|you\s+are\s+now|bypass|jailbreak|override\s+safety)/i,
     /forget\s+(everything|your\s+instructions)/i,
     /as\s+an\s+ai\s+language\s+model/i,
     
     // 2. Cypher Injection (Graph Integrity Protection)
-    /\b(MATCH|DELETE|DROP|MERGE|CREATE|REMOVE|DETACH|LIMIT|SKIP)\b/i,
-    /--|UNION|SELECT|INSERT|UPDATE/i // SQL-like patterns that might be tried
+    // Use multi-token patterns requiring Cypher syntax context, NOT single keywords.
+    // Single words like MATCH, LIMIT, SKIP, CREATE are common in aviation regulations.
+    /\bMATCH\s*\(/i,                          // MATCH ( — Cypher query start
+    /\bDETACH\s+DELETE\b/i,                   // DETACH DELETE — destructive Cypher
+    /\bDROP\s+(DATABASE|INDEX|CONSTRAINT)\b/i, // DROP DATABASE/INDEX — destructive
+    /\bMERGE\s*\(/i,                          // MERGE ( — Cypher write pattern
+    /\bCREATE\s*\(\s*\w*\s*:/i,               // CREATE (n: — Cypher node creation
+    /\bREMOVE\s+\w+\.\w+/i,                   // REMOVE n.prop — Cypher property removal
+    /\bCALL\s+\w+\.\w+/i,                     // CALL db.procedure — APOC/procedure call
+
+    // 3. SQL-like injection (defence in depth)
+    /\bUNION\s+(ALL\s+)?SELECT\b/i,           // UNION SELECT — SQL injection
+    /;\s*DROP\s/i,                             // ;DROP — statement chaining
+    /--\s*$/m                                  // -- at end of line — SQL comment injection
 ];
 
 /**

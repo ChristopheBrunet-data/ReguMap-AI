@@ -1,10 +1,12 @@
 """
-Ingestion Routes — Manages document loading and index building.
+Ingestion Routes — Manages document loading, crawling, and index building.
 
 GET  /api/v1/ingest/status       — Current ingestion state
 POST /api/v1/ingest/easa         — Load EASA XML rules
 POST /api/v1/ingest/manual       — Upload operator manual (PDF)
 POST /api/v1/ingest/prefilter    — Run semantic pre-filtering
+POST /api/v1/ingest/crawl        — Run full autonomous crawl+ingest pipeline
+POST /api/v1/ingest/crawl/{domain} — Crawl a single EASA domain
 """
 
 from __future__ import annotations
@@ -176,3 +178,52 @@ async def run_prefilter(
         pre_filtered=engine.pre_filtered,
         graph_built=engine.knowledge_graph.is_built(),
     )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Autonomous Crawl Pipeline (Task 7)
+# ──────────────────────────────────────────────────────────────────────────────
+
+@router.post(
+    "/crawl",
+    summary="Run full autonomous crawl+ingest pipeline",
+    description=(
+        "Crawls all 12 EASA regulatory domains, parses XML, builds the knowledge graph, "
+        "syncs to Neo4j, and rebuilds the vector index. Returns a full pipeline report."
+    ),
+)
+async def run_full_crawl(
+    force: bool = False,
+    engine: ComplianceEngine = Depends(get_engine),
+):
+    """Full autonomous pipeline: crawl → parse → graph → neo4j → vector index."""
+    from api_pkg.dependencies import get_neo4j_driver
+    from services.ingestion_service import IngestionService
+
+    neo4j_driver = get_neo4j_driver()
+    service = IngestionService(engine, neo4j_driver)
+    result = await service.run_full_pipeline(force_crawl=force)
+    return result
+
+
+@router.post(
+    "/crawl/{domain}",
+    summary="Crawl a single EASA domain",
+    description="Downloads and parses a single EASA regulatory domain.",
+)
+async def run_domain_crawl(
+    domain: str,
+    engine: ComplianceEngine = Depends(get_engine),
+):
+    """Single-domain crawl: download → parse → return summary."""
+    from api_pkg.dependencies import get_neo4j_driver
+    from services.ingestion_service import IngestionService
+
+    neo4j_driver = get_neo4j_driver()
+    service = IngestionService(engine, neo4j_driver)
+    result = await service.run_single_domain(domain)
+
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+
+    return result

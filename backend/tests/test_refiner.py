@@ -3,7 +3,7 @@ Tests for the QueryRefiner module.
 """
 
 import pytest
-from refiner import RefinedQuery
+from services.refiner import RefinedQuery
 
 
 class TestRefinedQueryModel:

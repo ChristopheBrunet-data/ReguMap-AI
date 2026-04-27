@@ -7,8 +7,8 @@ const app = express();
 const PORT = 3000;
 const BACKEND_URL = process.env.BACKEND_URL || 'http://python-backend:8000';
 
-app.use(express.json({ limit: '100mb' })); // Increased for large ingestion metadata
-app.use(express.urlencoded({ limit: '100mb', extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 console.log('--- ReguMap-AI Gateway ---');
 console.log(`Target Backend: ${BACKEND_URL}`);
@@ -30,7 +30,7 @@ if (!JWT_SECRET) {
 }
 
 app.use((req, res, next) => {
-  const publicRoutes = ['/api/v1/auth/login', '/health', '/api/v1/ingest/easa', '/api/v1/ingest/status'];
+  const publicRoutes = ['/api/v1/auth/login', '/health'];
   if (publicRoutes.includes(req.path)) {
     return next();
   }

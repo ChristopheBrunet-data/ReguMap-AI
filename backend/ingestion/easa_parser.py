@@ -1,14 +1,11 @@
 from lxml import etree
 from typing import List, Dict
-import sys
 import os
 
-# Ensure the backend root is in the path to allow absolute imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from schemas import RegulationNode
+from ingestion.contracts import RegulatoryNode
 from ingestion.hasher import generate_node_hash
 
-def parse_easa_xml(file_path: str) -> List[RegulationNode]:
+def parse_easa_xml(file_path: str) -> List[RegulatoryNode]:
     """
     Parses EASA Easy Access Rules XML into a hierarchical DOM structure using lxml.
     Instantiates strictly typed RegulationNode objects for downstream ingestion.
@@ -72,12 +69,18 @@ def parse_easa_xml(file_path: str) -> List[RegulationNode]:
         # Generate the cryptographic hash
         sha256_hash = generate_node_hash(node_id, content)
         
+        parent_id = topic.get('parent-id')
+        title = topic.get('source-title')
+
         try:
-            node = RegulationNode(
+            node = RegulatoryNode(
                 node_id=node_id,
+                title=title,
                 content=content,
-                category=category,
-                sha256_hash=sha256_hash
+                content_hash=sha256_hash,
+                parent_id=parent_id,
+                node_type="Regulation",
+                metadata={"category": category}
             )
             nodes.append(node)
         except Exception as e:
@@ -86,7 +89,7 @@ def parse_easa_xml(file_path: str) -> List[RegulationNode]:
     return nodes
 
 if __name__ == "__main__":
-    sample_path = os.path.join(os.path.dirname(__file__), "..", "sample_easa.xml")
+    sample_path = os.path.join(os.path.dirname(__file__), "..", "tests", "fixtures", "sample_easa.xml")
     if os.path.exists(sample_path):
         results = parse_easa_xml(sample_path)
         for res in results[:5]: # print first 5

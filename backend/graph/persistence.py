@@ -34,11 +34,13 @@ def upsert_nodes_to_neo4j(driver: Driver, nodes: List[RegulatoryNode], batch_siz
             }
         })
 
-    # 2. Cypher Query (Idempotent Upsert)
+    # 2. Cypher Query (Idempotent Upsert — aligned with init_schema.cypher)
     query = """
     UNWIND $batch AS row
     MERGE (n:RegulatoryNode {node_id: row.node_id})
     SET n += row.properties,
+        n.status = coalesce(row.properties.status, 'active'),
+        n.version = coalesce(row.properties.version, '1'),
         n.updated_at = datetime()
     """
 

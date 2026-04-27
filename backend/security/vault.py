@@ -10,25 +10,52 @@ from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
+# Public API — only these are exported by `from .vault import *`
+__all__ = [
+    "encrypt_data",
+    "decrypt_data",
+    "secure_save_json",
+    "secure_load_json",
+    "redact_pii",
+    "sanitize_input",
+    "SecurityException",
+    "log_audit_event",
+    "generate_session_token",
+    "verify_session_token",
+    "check_permission",
+    "ROLES",
+]
+
 # ──────────────────────────────────────────────────────────────────────────────
 # 1. SECRET MANAGEMENT
 # ──────────────────────────────────────────────────────────────────────────────
-load_dotenv()
 
-# Master Key for AES-256 (stored in .env, never in code)
-# If not found, generate one for this session (not persistent unless saved to .env)
-ENCRYPTION_KEY = os.getenv("APP_ENCRYPTION_KEY")
-if not ENCRYPTION_KEY:
-    ENCRYPTION_KEY = Fernet.generate_key().decode()
-    logger.warning(
-        "APP_ENCRYPTION_KEY not found in environment. Using an ephemeral key for this session. "
-        "Any data encrypted in this session will be UNRECOVERABLE after restart. "
-        "Set APP_ENCRYPTION_KEY in your .env file for persistent encryption."
-    )
+# Lazy init: only load .env when secrets are first accessed,
+# not at module import time (prevents side-effects during testing)
+_secrets_initialized = False
+CIPHER = None
+JWT_SECRET = None
 
-CIPHER = Fernet(ENCRYPTION_KEY.encode())
+def _init_secrets():
+    """Initialize encryption and JWT secrets on first use."""
+    global _secrets_initialized, CIPHER, JWT_SECRET
+    if _secrets_initialized:
+        return
+    _secrets_initialized = True
 
-JWT_SECRET = os.getenv("JWT_SECRET")
+    load_dotenv()
+    encryption_key = os.getenv("APP_ENCRYPTION_KEY")
+    if not encryption_key:
+        encryption_key = Fernet.generate_key().decode()
+        logger.warning(
+            "APP_ENCRYPTION_KEY not found in environment. Using an ephemeral key for this session. "
+            "Any data encrypted in this session will be UNRECOVERABLE after restart. "
+            "Set APP_ENCRYPTION_KEY in your .env file for persistent encryption."
+        )
+    CIPHER = Fernet(encryption_key.encode())
+    JWT_SECRET = os.getenv("JWT_SECRET")
+
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 2. DATA PROTECTION (AES-256)
@@ -36,10 +63,12 @@ JWT_SECRET = os.getenv("JWT_SECRET")
 
 def encrypt_data(data: bytes) -> bytes:
     """Encrypts raw bytes using AES-256."""
+    _init_secrets()
     return CIPHER.encrypt(data)
 
 def decrypt_data(token: bytes) -> bytes:
     """Decrypts AES-256 encrypted bytes."""
+    _init_secrets()
     return CIPHER.decrypt(token)
 
 def secure_save_json(filepath: str, data: dict):
@@ -153,7 +182,8 @@ ROLES = {
 
 def generate_session_token(user_id: str, role: str) -> str:
     """Generates a short-lived JWT session token."""
-    if not os.getenv("JWT_SECRET"):
+    _init_secrets()
+    if not JWT_SECRET:
         raise SecurityException("JWT_SECRET environment variable is not set.")
     
     payload = {
@@ -165,6 +195,7 @@ def generate_session_token(user_id: str, role: str) -> str:
 
 def verify_session_token(token: str) -> Optional[dict]:
     """Verifies a JWT session token."""
+    _init_secrets()
     try:
         return jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
     except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):

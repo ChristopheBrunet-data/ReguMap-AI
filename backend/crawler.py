@@ -4,9 +4,23 @@ import zipfile
 import io
 import datetime
 import time
+import random
+import logging
 import feedparser
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+
+logger = logging.getLogger(__name__)
+
+# Rate limiting: min/max delay between EASA requests (seconds)
+_CRAWL_DELAY_MIN = 1.5
+_CRAWL_DELAY_MAX = 3.0
+
+def _rate_limit():
+    """Polite delay between requests to avoid EASA throttling."""
+    delay = random.uniform(_CRAWL_DELAY_MIN, _CRAWL_DELAY_MAX)
+    time.sleep(delay)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # ALL 12 Easy Access Rules published by EASA as of March 2026.
@@ -128,16 +142,27 @@ def get_all_pdf_paths() -> dict:
 # Deep Crawl — single domain
 # ──────────────────────────────────────────────────────────────────────────────
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=2, min=4, max=30),
+    retry=retry_if_exception_type((requests.exceptions.ConnectionError, requests.exceptions.Timeout)),
+    reraise=True,
+)
 def _scrape_xml_url_from_page(page_url: str) -> str:
     """
     Scrapes a given EASA document library page to locate the XML/ZIP download link.
     Returns the direct download URL or empty string.
+    Falls back to LLM extraction if BeautifulSoup selectors fail (Task 6).
     """
     try:
+        _rate_limit()
         session = _get_session()
         response = session.get(page_url, timeout=20)
         if response.status_code == 404:
             return ""
+        if response.status_code in (429, 503):
+            logger.warning(f"Rate limited ({response.status_code}), will retry: {page_url}")
+            raise requests.exceptions.ConnectionError(f"HTTP {response.status_code}")
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
 
@@ -154,9 +179,71 @@ def _scrape_xml_url_from_page(page_url: str) -> str:
             if href.endswith(".xml") or href.endswith(".zip"):
                 return urljoin(response.url, a_tag["href"])
 
+        # Priority 3: LLM Fallback (Task 6) — selector failure
+        logger.warning(f"BS4 selectors returned nothing for {page_url}. Trying LLM fallback...")
+        return _llm_extract_download_url(response.text, page_url)
+
+    except requests.exceptions.ConnectionError:
+        raise  # Let tenacity retry
     except Exception as e:
-        print(f"Failed to scrape {page_url}: {e}")
+        logger.error(f"Failed to scrape {page_url}: {e}")
     return ""
+
+
+def _llm_extract_download_url(html_content: str, page_url: str) -> str:
+    """
+    Task 6: LLM Fallback — uses Gemini to extract download URL from raw HTML
+    when BeautifulSoup selectors fail due to page structure changes.
+
+    Risk mitigation:
+    - Output is validated with a HEAD request before returning
+    - HTML is truncated to 8000 chars to stay within token limits
+    - Failure returns empty string (graceful degradation)
+    """
+    try:
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            logger.warning("LLM fallback: GEMINI_API_KEY not set, skipping")
+            return ""
+
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        from langchain_core.messages import HumanMessage
+
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash", temperature=0.0, google_api_key=api_key,
+        )
+
+        # Truncate HTML to avoid token overflow
+        truncated_html = html_content[:8000]
+
+        prompt = (
+            f"You are analyzing an EASA regulatory document page at {page_url}.\n"
+            f"The page HTML is below. Extract the direct download URL for the XML or ZIP file "
+            f"containing the Easy Access Rules data. Return ONLY the absolute URL, nothing else.\n"
+            f"If no download link exists, return 'NONE'.\n\n"
+            f"HTML:\n{truncated_html}"
+        )
+
+        response = llm.invoke([HumanMessage(content=prompt)])
+        candidate_url = response.content.strip()
+
+        if candidate_url == "NONE" or not candidate_url.startswith("http"):
+            logger.info("LLM fallback: no URL found")
+            return ""
+
+        # Validate with HEAD request
+        _rate_limit()
+        head_resp = _get_session().head(candidate_url, timeout=10, allow_redirects=True)
+        if head_resp.status_code < 400:
+            logger.info(f"LLM fallback SUCCESS: {candidate_url}")
+            return candidate_url
+        else:
+            logger.warning(f"LLM fallback URL invalid (HTTP {head_resp.status_code}): {candidate_url}")
+            return ""
+
+    except Exception as e:
+        logger.error(f"LLM fallback failed: {e}")
+        return ""
 
 
 def _scrape_pdf_url_from_page(page_url: str) -> str:
@@ -189,13 +276,23 @@ def _scrape_pdf_url_from_page(page_url: str) -> str:
     return ""
 
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=2, min=4, max=30),
+    retry=retry_if_exception_type((requests.exceptions.ConnectionError, requests.exceptions.Timeout)),
+    reraise=True,
+)
 def _download_to_domain(download_url: str, domain: str) -> bool:
     """Downloads XML/ZIP from URL and saves it under the domain's data folder."""
-    print(f"[{domain}] Downloading from {download_url}...")
+    logger.info(f"[{domain}] Downloading from {download_url}...")
     folder = _domain_dir(domain)
     try:
+        _rate_limit()
         session = _get_session()
-        resp = session.get(download_url, stream=True, timeout=30)
+        resp = session.get(download_url, stream=True, timeout=60)
+        if resp.status_code in (429, 503):
+            logger.warning(f"[{domain}] Rate limited ({resp.status_code}), will retry")
+            raise requests.exceptions.ConnectionError(f"HTTP {resp.status_code}")
         resp.raise_for_status()
 
         filename = download_url.split("/")[-1].split("?")[0]
@@ -206,23 +303,25 @@ def _download_to_domain(download_url: str, domain: str) -> bool:
             with zipfile.ZipFile(io.BytesIO(resp.content)) as z:
                 xml_files = [f for f in z.namelist() if f.endswith(".xml")]
                 if not xml_files:
-                    print(f"[{domain}] ZIP contains no XML files.")
+                    logger.warning(f"[{domain}] ZIP contains no XML files.")
                     return False
                 for xml_file in xml_files:
                     z.extract(xml_file, folder)
-                    print(f"[{domain}] Extracted: {xml_file}")
+                    logger.info(f"[{domain}] Extracted: {xml_file}")
         except zipfile.BadZipFile:
             xml_path = os.path.join(folder, filename if filename.endswith(".xml") else filename + ".xml")
             with open(xml_path, "wb") as f:
                 f.write(resp.content)
-            print(f"[{domain}] Saved XML to: {xml_path}")
+            logger.info(f"[{domain}] Saved XML to: {xml_path}")
 
         with open(os.path.join(folder, ".latest_download"), "w") as f:
             f.write(filename)
 
         return True
+    except requests.exceptions.ConnectionError:
+        raise  # Let tenacity retry
     except Exception as e:
-        print(f"[{domain}] Download failed: {e}")
+        logger.error(f"[{domain}] Download failed: {e}")
         return False
 
 

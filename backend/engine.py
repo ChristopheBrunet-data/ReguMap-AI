@@ -87,6 +87,10 @@ class ComplianceEngine:
         self._rule_lookup: Dict[str, EasaRequirement] = {}
         self._all_rules: List[EasaRequirement] = []
 
+    def get_requirement(self, requirement_id: str) -> Optional[EasaRequirement]:
+        """Public accessor for requirement lookup by ID."""
+        return self._rule_lookup.get(requirement_id)
+
     @property
     def embeddings(self) -> HuggingFaceEmbeddings:
         if self._embeddings is None:

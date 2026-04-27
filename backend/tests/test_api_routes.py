@@ -29,14 +29,25 @@ def mock_engine():
 
 @pytest.fixture
 def client(mock_engine):
-    """Creates a test client with the mock engine injected."""
+    """Creates a test client with the mock engine injected and auth bypassed."""
+    import os
     from api_pkg.main import app
     from api_pkg.dependencies import get_engine
+
+    # Enable dev-mode auth bypass for testing
+    original_auth = os.environ.get("DISABLE_AUTH")
+    os.environ["DISABLE_AUTH"] = "true"
 
     app.dependency_overrides[get_engine] = lambda: mock_engine
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
+
+    # Restore original env
+    if original_auth is None:
+        os.environ.pop("DISABLE_AUTH", None)
+    else:
+        os.environ["DISABLE_AUTH"] = original_auth
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -130,7 +141,7 @@ class TestComplianceRoutes:
     def test_audit_requirement_not_found(self, client, mock_engine):
         """Should return 404 for unknown requirement."""
         mock_engine.pre_filtered = True
-        mock_engine._rule_lookup = {}
+        mock_engine.get_requirement.return_value = None
         response = client.post(
             "/api/v1/audit/compliance",
             json={"requirement_id": "NONEXISTENT.999"},

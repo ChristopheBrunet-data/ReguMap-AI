@@ -17,6 +17,7 @@ from schemas import (
     EasaRequirement, ManualChunk, ComplianceAudit, AuditStatus,
     Alert, ComplianceTask, GraphNode, GraphEdge, GraphNodeType, EdgeType,
 )
+from ingestion.contracts import RegulatoryNode
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -97,6 +98,24 @@ def sample_manual_chunk_with_diagram() -> ManualChunk:
 def sample_rules_list(sample_requirement, sample_requirement_ftl, sample_amc_requirement):
     """Returns a list of mixed requirements for index building."""
     return [sample_requirement, sample_requirement_ftl, sample_amc_requirement]
+
+
+@pytest.fixture
+def sample_regulatory_nodes(sample_rules_list):
+    """Maps EasaRequirement to RegulatoryNode for graph testing."""
+    import hashlib
+    nodes = []
+    for r in sample_rules_list:
+        content_hash = hashlib.sha256(r.text.encode()).hexdigest()
+        nodes.append(RegulatoryNode(
+            node_id=r.id,
+            title=r.source_title,
+            content=r.text,
+            content_hash=content_hash,
+            node_type="Regulation" if r.amc_gm_info == "Hard Law" else "AMC_GM",
+            metadata={"domain": r.domain, "law_type": r.amc_gm_info}
+        ))
+    return nodes
 
 
 @pytest.fixture
