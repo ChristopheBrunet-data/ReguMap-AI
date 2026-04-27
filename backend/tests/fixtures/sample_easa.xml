@@ -1,2 +1,25 @@
-<?xml version='1.0' encoding='utf-8'?>
-<easy_access_rules><rule id="ADR.OR.B.005" level="Hard Law" reference="Part-ADR.OR.B.005"><title>Management System</title><content>The aerodrome operator shall establish and maintain a management system that includes: (1) clearly defined lines of responsibility and accountability throughout the organisation, including a direct safety accountability of the accountable manager; (2) a description of the overall philosophies and principles of the organisation with regard to safety, referred to as the safety policy.</content></rule></easy_access_rules>
+<er:document xmlns:er="http://www.easa.europa.eu/erules-export"
+             guid="3985b59e-f9c0-47c6-bb7c-2d748ac99d8f"
+             source-title="Test Regulation Document">
+   <er:toc>
+      <er:heading title="SUBPART A — GENERAL"/>
+      <er:toc>
+         <er:topic ERulesId="ADR.OR.A.005"
+                   source-title="ADR.OR.A.005 Scope"
+                   TypeOfContent="IR (Implementing rule);"
+                   Domain="Aerodromes;">
+            <content>
+               <para>This is the test content for ADR.OR.A.005.</para>
+            </content>
+         </er:topic>
+         <er:topic ERulesId="AMC1 ADR.OR.A.015"
+                   source-title="AMC1 ADR.OR.A.015 Means of compliance"
+                   TypeOfContent="AMC to IR (Acceptable means of compliance to implementing rule);"
+                   ParentIR="ADR.OR.A.015">
+            <content>
+               <para>This is the AMC content.</para>
+            </content>
+         </er:topic>
+      </er:toc>
+   </er:toc>
+</er:document>

@@ -245,18 +245,12 @@ class IngestionService:
         if not raw_nodes:
             return []
 
-        # Convert RegulationNode → RegulatoryNode (contracts format)
-        from ingestion.hasher import generate_node_hash
-        result: List[ContractNode] = []
+        # Ensure domain metadata is set for all nodes
+        for node in raw_nodes:
+            if "domain" not in node.metadata:
+                node.metadata["domain"] = domain
+            # Backwards compatibility for 'category' if needed by downstream
+            if "category" not in node.metadata and node.node_type:
+                node.metadata["category"] = node.node_type
 
-        for rn in raw_nodes:
-            result.append(ContractNode(
-                node_id=rn.node_id,
-                title=rn.node_id,
-                content=rn.content,
-                content_hash=rn.sha256_hash,
-                node_type=rn.category,
-                metadata={"domain": domain, "category": rn.category},
-            ))
-
-        return result
+        return raw_nodes

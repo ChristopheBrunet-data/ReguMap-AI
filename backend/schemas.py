@@ -129,7 +129,7 @@ class RegulationNode(BaseModel):
     node_id: str = Field(..., description="Identifiant unique (ex: 'ADR.OR.B.005')")
     content: str = Field(..., description="Texte pur de la réglementation")
     category: str = Field(..., description="Taxonomie légale (ex: 'IR', 'AMC', 'GM', 'CS')")
-    sha256_hash: str = Field(..., description="Hash cryptographique (SHA-256) du contenu et de l'ID")
+    content_hash: str = Field(..., description="Hash cryptographique (SHA-256) du contenu et de l'ID")
 
     @field_validator("node_id", "content", "category")
     @classmethod
