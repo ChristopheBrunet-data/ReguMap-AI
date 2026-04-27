@@ -41,8 +41,8 @@ class SymbolicValidator:
 
         # Génération d'une requête Cypher stricte pour vérifier l'existence
         cypher_query = """
-        MATCH (n) WHERE n.id IN $node_ids
-        RETURN n.id AS node_id, n.sha256_hash AS node_hash
+        MATCH (n) WHERE n.node_id IN $node_ids
+        RETURN n.node_id AS node_id, n.content_hash AS node_hash
         """
         
         found_map: Dict[str, str] = {}

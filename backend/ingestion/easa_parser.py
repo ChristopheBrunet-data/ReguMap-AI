@@ -94,7 +94,7 @@ if __name__ == "__main__":
         results = parse_easa_xml(sample_path)
         for res in results[:5]: # print first 5
             print(f"[{res.category}] {res.node_id}")
-            print(f"Hash: {res.sha256_hash}")
+            print(f"Hash: {res.content_hash}")
             print(f"Content: {res.content[:50]}...")
             print("-" * 20)
         print(f"Total nodes parsed: {len(results)}")
